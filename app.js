@@ -221,11 +221,9 @@ async function onAddSession(e) {
   const rate = parseFloat($('fCommission').value) || 0;
   const toOrg = Math.round(fee * rate / 100);
   const toArmeet = fee - toOrg;
-  const nextSrNo = DATA.sessions.reduce((m, s) => Math.max(m, s.srNo || 0), 0) + 1;
 
   const session = {
     id: crypto.randomUUID(),
-    srNo: nextSrNo,
     session: $('fSession').value.trim(),
     date: $('fDate').value,
     reference,
@@ -308,6 +306,17 @@ function hideToast() {
 // ===== FILTERS =====
 function monthKey(dateStr) { return dateStr ? dateStr.slice(0, 7) : ''; }
 
+// Sr. No is always derived from chronological order across ALL sessions —
+// oldest date is #1 — regardless of the order entries were added in.
+// Ties on the same date fall back to createdAt (add order) for stability.
+function computeSrNoMap() {
+  const sorted = [...DATA.sessions].sort((a, b) =>
+    a.date.localeCompare(b.date) || (a.createdAt || '').localeCompare(b.createdAt || ''));
+  const map = new Map();
+  sorted.forEach((s, i) => map.set(s.id, i + 1));
+  return map;
+}
+
 function renderMonthOptions() {
   const sel = $('monthFilter');
   const current = sel.value;
@@ -339,7 +348,7 @@ function filteredSessions() {
   return DATA.sessions
     .filter(s => !month || monthKey(s.date) === month)
     .filter(s => !org || s.reference === org)
-    .sort((a, b) => a.date.localeCompare(b.date) || a.srNo - b.srNo);
+    .sort((a, b) => a.date.localeCompare(b.date) || (a.createdAt || '').localeCompare(b.createdAt || ''));
 }
 
 // ===== DASHBOARD =====
@@ -388,10 +397,11 @@ function renderDashboard() {
 // ===== TABLE =====
 function renderTable() {
   const rows = filteredSessions();
+  const srNoMap = computeSrNoMap();
   $('emptyState').classList.toggle('hidden', rows.length > 0);
   $('tableBody').innerHTML = rows.map(s => `
     <tr>
-      <td>${s.srNo}</td>
+      <td>${srNoMap.get(s.id)}</td>
       <td class="session-name">${escapeHtml(s.session)}</td>
       <td>${formatDate(s.date)}</td>
       <td><span class="ref-tag ${refClass(s.reference)}">${escapeHtml(s.reference)}</span></td>
@@ -501,9 +511,10 @@ function renderClientResults() {
 function onExport() {
   const rows = filteredSessions();
   if (!rows.length) { alert('Nothing to export for this filter.'); return; }
+  const srNoMap = computeSrNoMap();
 
   const sheetRows = rows.map(s => ({
-    'Sr. No': s.srNo,
+    'Sr. No': srNoMap.get(s.id),
     'Session': s.session,
     'Date': formatDate(s.date),
     'Mode of Reference': s.reference,
