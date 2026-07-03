@@ -131,6 +131,37 @@
       <div id="clientResults"></div>
     </section>
 
+    <!-- ===== BREAKDOWN STATS ===== -->
+    <section class="panel breakdown-panel">
+      <div class="table-header">
+        <h2>Breakdown</h2>
+        <span class="hint" style="margin:0;">for the month selected above</span>
+      </div>
+      <div class="breakdown-grid">
+        <div class="breakdown-col">
+          <h3>By referrer</h3>
+          <table class="mini-table">
+            <thead><tr><th></th><th>Sessions</th><th>Earned</th></tr></thead>
+            <tbody id="refBreakdownBody"></tbody>
+          </table>
+        </div>
+        <div class="breakdown-col">
+          <h3>By location</h3>
+          <table class="mini-table">
+            <thead><tr><th></th><th>Sessions</th><th>Earned</th></tr></thead>
+            <tbody id="locationBreakdownBody"></tbody>
+          </table>
+        </div>
+        <div class="breakdown-col">
+          <h3>By mode</h3>
+          <table class="mini-table">
+            <thead><tr><th></th><th>Sessions</th><th>Earned</th></tr></thead>
+            <tbody id="modeBreakdownBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
     <!-- ===== TABLE ===== -->
     <section class="panel table-panel">
       <div class="table-header">
@@ -139,17 +170,30 @@
           <select id="orgFilter">
             <option value="">All referrers</option>
           </select>
+          <select id="locationFilterSel">
+            <option value="">All locations</option>
+          </select>
+          <select id="modeFilterSel">
+            <option value="">All modes</option>
+            <option value="Online">Online</option>
+            <option value="Offline">Offline</option>
+          </select>
           <div class="export-group">
             <button class="btn btn-ghost" id="exportBtn">Export .xlsx</button>
           </div>
         </div>
       </div>
+      <p class="hint" style="margin:-8px 0 12px;">Click a column header to sort by it.</p>
       <div class="table-wrap">
         <table id="sessionsTable">
           <thead>
             <tr>
-              <th>#</th><th>Session</th><th>Date</th><th>Referred via</th>
-              <th>Mode</th><th>Location</th><th>Fee</th><th>Comm.</th>
+              <th>#</th><th>Session</th>
+              <th class="sortable" data-sort="date">Date</th>
+              <th class="sortable" data-sort="reference">Referred via</th>
+              <th class="sortable" data-sort="modeSession">Mode</th>
+              <th class="sortable" data-sort="location">Location</th>
+              <th>Fee</th><th>Comm.</th>
               <th>To org</th><th>To Armeet</th><th></th>
             </tr>
           </thead>
