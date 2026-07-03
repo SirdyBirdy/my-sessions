@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ledger — Session Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ===== HEADER ===== -->
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">§</span>
+      <div>
+        <h1>Ledger</h1>
+        <p class="brand-sub">Armeet's session register</p>
+      </div>
+    </div>
+    <div class="topbar-actions">
+      <div class="sync-status" id="syncStatus">
+        <span class="dot" id="syncDot"></span>
+        <span id="syncLabel">not connected</span>
+      </div>
+      <button class="btn btn-ghost" id="settingsBtn" title="Connection settings">Settings</button>
+    </div>
+  </header>
+
+  <!-- ===== SETTINGS PANEL (hidden by default) ===== -->
+  <section class="panel settings-panel hidden" id="settingsPanel">
+    <h2>Connect your GitHub repo</h2>
+    <p class="hint">Data is stored as <code>data/sessions.json</code> inside a repo you own — read and written directly via the GitHub API. Your token stays only in this browser's local storage; it is never uploaded anywhere except directly to GitHub.</p>
+    <div class="grid-2">
+      <label>GitHub username / org
+        <input type="text" id="cfgOwner" placeholder="armeet">
+      </label>
+      <label>Repository name
+        <input type="text" id="cfgRepo" placeholder="sessions-tracker">
+      </label>
+      <label>Branch
+        <input type="text" id="cfgBranch" placeholder="main" value="main">
+      </label>
+      <label>Data file path
+        <input type="text" id="cfgPath" placeholder="data/sessions.json" value="data/sessions.json">
+      </label>
+    </div>
+    <label class="full">Personal access token (fine-grained, Contents: Read & write, scoped to this one repo)
+      <input type="password" id="cfgToken" placeholder="github_pat_...">
+    </label>
+    <p class="hint">Create one at github.com → Settings → Developer settings → Fine-grained tokens. Grant it access to only this repository, with Contents permission set to Read and write.</p>
+    <div class="panel-actions">
+      <button class="btn btn-primary" id="cfgSave">Save & connect</button>
+      <button class="btn btn-ghost" id="cfgCancel">Cancel</button>
+    </div>
+  </section>
+
+  <main class="content">
+
+    <!-- ===== QUICK ADD ===== -->
+    <section class="panel quick-add" id="quickAdd">
+      <h2>New session</h2>
+      <form id="sessionForm">
+        <div class="grid-form">
+          <label>Session
+            <input type="text" id="fSession" placeholder="Client name with referrer initials" required>
+          </label>
+          <label>Date
+            <input type="date" id="fDate" required>
+          </label>
+          <label>Referred via
+            <select id="fReference" required></select>
+          </label>
+          <label class="new-ref-row hidden" id="newRefRow">
+            New source name
+            <input type="text" id="fNewReference" placeholder="e.g. Mann Clinic">
+          </label>
+          <label>Mode
+            <select id="fModeSession" required>
+              <option value="Online">Online</option>
+              <option value="Offline">Offline</option>
+            </select>
+          </label>
+          <label>Location
+            <input type="text" id="fLocation" list="locationOptions" placeholder="Home / Camp / Clinic name" required>
+            <datalist id="locationOptions"></datalist>
+          </label>
+          <label>Fee (₹)
+            <input type="number" id="fFee" min="0" step="1" required>
+          </label>
+          <label>Commission rate (%)
+            <input type="number" id="fCommission" min="0" max="100" step="0.01" required>
+          </label>
+        </div>
+        <div class="calc-preview" id="calcPreview">To organisation ₹0 · To Armeet ₹0</div>
+        <div class="panel-actions">
+          <button type="submit" class="btn btn-primary">Add session</button>
+          <span class="save-state" id="saveState"></span>
+        </div>
+      </form>
+    </section>
+
+    <!-- ===== DASHBOARD ===== -->
+    <section class="dashboard">
+      <div class="dash-header">
+        <h2>Month summary</h2>
+        <select id="monthFilter"></select>
+      </div>
+      <div class="cards" id="summaryCards"></div>
+      <div class="panel trend-panel">
+        <div class="table-header">
+          <h2>Earnings trend</h2>
+          <span class="hint" style="margin:0;">your take-home, last 12 months</span>
+        </div>
+        <div id="trendChart"></div>
+      </div>
+    </section>
+
+    <!-- ===== CLIENT LOOKUP ===== -->
+    <section class="panel client-lookup">
+      <h2>Client history</h2>
+      <input type="text" id="clientSearch" placeholder="Type a client name to see their session history…">
+      <div id="clientResults"></div>
+    </section>
+
+    <!-- ===== TABLE ===== -->
+    <section class="panel table-panel">
+      <div class="table-header">
+        <h2>Sessions</h2>
+        <div class="table-tools">
+          <select id="orgFilter">
+            <option value="">All referrers</option>
+          </select>
+          <div class="export-group">
+            <button class="btn btn-ghost" id="exportBtn">Export .xlsx</button>
+          </div>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table id="sessionsTable">
+          <thead>
+            <tr>
+              <th>#</th><th>Session</th><th>Date</th><th>Referred via</th>
+              <th>Mode</th><th>Location</th><th>Fee</th><th>Comm.</th>
+              <th>To org</th><th>To Armeet</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="tableBody"></tbody>
+        </table>
+        <p class="empty-state hidden" id="emptyState">No sessions logged for this filter yet. Add one above.</p>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<div class="toast hidden" id="toast">
+  <span id="toastMsg"></span>
+  <button class="btn btn-small btn-primary" id="toastUndo">Undo</button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
