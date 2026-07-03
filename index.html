@@ -63,7 +63,10 @@
 
     <!-- ===== QUICK ADD ===== -->
     <section class="panel quick-add" id="quickAdd">
-      <h2>New session</h2>
+      <div class="table-header">
+        <h2 id="formTitle">New session</h2>
+        <span class="edit-badge hidden" id="editBadge">Editing #<span id="editSrNo"></span></span>
+      </div>
       <form id="sessionForm">
         <div class="grid-form">
           <label>Session
@@ -98,7 +101,8 @@
         </div>
         <div class="calc-preview" id="calcPreview">To organisation ₹0 · To Armeet ₹0</div>
         <div class="panel-actions">
-          <button type="submit" class="btn btn-primary">Add session</button>
+          <button type="submit" class="btn btn-primary" id="formSubmitBtn">Add session</button>
+          <button type="button" class="btn btn-ghost hidden" id="cancelEditBtn">Cancel edit</button>
           <span class="save-state" id="saveState"></span>
         </div>
       </form>
