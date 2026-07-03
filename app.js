@@ -37,6 +37,7 @@ function bindEvents() {
 
   $('clientSearch').addEventListener('input', renderClientResults);
   $('toastUndo').addEventListener('click', undoDelete);
+  $('cancelEditBtn').addEventListener('click', exitEditMode);
 }
 
 // ===== CONFIG =====
@@ -205,7 +206,9 @@ function updateCalcPreview() {
   $('calcPreview').textContent = `To organisation ₹${toOrg.toLocaleString('en-IN')} · To Armeet ₹${toArmeet.toLocaleString('en-IN')}`;
 }
 
-// ===== ADD SESSION =====
+// ===== ADD / EDIT SESSION =====
+let editingId = null;
+
 async function onAddSession(e) {
   e.preventDefault();
   if (!CONFIG) { alert('Connect a repo first (Settings, top right).'); return; }
@@ -221,40 +224,101 @@ async function onAddSession(e) {
   const rate = parseFloat($('fCommission').value) || 0;
   const toOrg = Math.round(fee * rate / 100);
   const toArmeet = fee - toOrg;
-
-  const session = {
-    id: crypto.randomUUID(),
+  const fields = {
     session: $('fSession').value.trim(),
     date: $('fDate').value,
     reference,
     modeSession: $('fModeSession').value,
     location: $('fLocation').value.trim(),
     fee, commissionRate: rate, toOrg, toArmeet,
-    createdAt: new Date().toISOString(),
   };
-  DATA.sessions.push(session);
 
-  const submitBtn = e.target.querySelector('button[type=submit]');
+  const submitBtn = $('formSubmitBtn');
   submitBtn.disabled = true;
-  try {
-    await saveData(`Add session: ${session.session}`);
-    $('sessionForm').reset();
-    $('fDate').value = todayISO();
-    onReferenceChange();
-    updateCalcPreview();
-    renderReferenceOptions();
-    renderMonthOptions();
-    renderOrgFilter();
-    updateLocationOptions();
-    renderDashboard();
-    renderTable();
-    renderTrendChart();
-    renderClientResults();
-  } catch (err) {
-    DATA.sessions.pop(); // rollback on failure
-  } finally {
-    submitBtn.disabled = false;
+
+  if (editingId) {
+    const idx = DATA.sessions.findIndex(s => s.id === editingId);
+    if (idx === -1) {
+      alert('This session no longer exists — it may have been deleted elsewhere.');
+      exitEditMode();
+      submitBtn.disabled = false;
+      return;
+    }
+    const original = { ...DATA.sessions[idx] };
+    DATA.sessions[idx] = { ...original, ...fields, updatedAt: new Date().toISOString() };
+    try {
+      await saveData(`Edit session: ${fields.session}`);
+      exitEditMode();
+      afterMutationRerender();
+    } catch (err) {
+      DATA.sessions[idx] = original; // rollback on failure
+    } finally {
+      submitBtn.disabled = false;
+    }
+  } else {
+    const session = { id: crypto.randomUUID(), ...fields, createdAt: new Date().toISOString() };
+    DATA.sessions.push(session);
+    try {
+      await saveData(`Add session: ${session.session}`);
+      resetForm();
+      afterMutationRerender();
+    } catch (err) {
+      DATA.sessions.pop(); // rollback on failure
+    } finally {
+      submitBtn.disabled = false;
+    }
   }
+}
+
+function afterMutationRerender() {
+  renderReferenceOptions();
+  renderMonthOptions();
+  renderOrgFilter();
+  updateLocationOptions();
+  renderDashboard();
+  renderTable();
+  renderTrendChart();
+  renderClientResults();
+}
+
+function resetForm() {
+  $('sessionForm').reset();
+  $('fDate').value = todayISO();
+  onReferenceChange();
+  updateCalcPreview();
+}
+
+function editSession(id) {
+  const session = DATA.sessions.find(s => s.id === id);
+  if (!session) return;
+  editingId = id;
+
+  $('fSession').value = session.session;
+  $('fDate').value = session.date;
+  $('fReference').value = session.reference;
+  onReferenceChange();
+  $('fModeSession').value = session.modeSession;
+  $('fLocation').value = session.location;
+  $('fFee').value = session.fee;
+  $('fCommission').value = session.commissionRate;
+  updateCalcPreview();
+
+  $('formTitle').textContent = 'Edit session';
+  $('editSrNo').textContent = computeSrNoMap().get(id);
+  $('editBadge').classList.remove('hidden');
+  $('formSubmitBtn').textContent = 'Save changes';
+  $('cancelEditBtn').classList.remove('hidden');
+
+  $('quickAdd').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function exitEditMode() {
+  editingId = null;
+  $('formTitle').textContent = 'New session';
+  $('editBadge').classList.add('hidden');
+  $('formSubmitBtn').textContent = 'Add session';
+  $('cancelEditBtn').classList.add('hidden');
+  resetForm();
 }
 
 let pendingDelete = null; // {session, index, timerId}
@@ -262,6 +326,7 @@ let pendingDelete = null; // {session, index, timerId}
 function deleteSession(id) {
   const idx = DATA.sessions.findIndex(s => s.id === id);
   if (idx === -1) return;
+  if (editingId === id) exitEditMode();
   finalizePendingDelete(); // commit any earlier pending delete first
   const session = DATA.sessions[idx];
   DATA.sessions.splice(idx, 1);
@@ -411,7 +476,10 @@ function renderTable() {
       <td>${s.commissionRate}%</td>
       <td>₹${s.toOrg.toLocaleString('en-IN')}</td>
       <td>₹${s.toArmeet.toLocaleString('en-IN')}</td>
-      <td><div class="row-actions"><button class="icon-btn" onclick="deleteSession('${s.id}')" title="Delete">✕</button></div></td>
+      <td><div class="row-actions">
+        <button class="icon-btn icon-btn-edit" onclick="editSession('${s.id}')" title="Edit">✎</button>
+        <button class="icon-btn" onclick="deleteSession('${s.id}')" title="Delete">✕</button>
+      </div></td>
     </tr>
   `).join('');
 }
