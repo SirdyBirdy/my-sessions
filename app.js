@@ -31,9 +31,15 @@ function bindEvents() {
   $('fFee').addEventListener('input', updateCalcPreview);
   $('fCommission').addEventListener('input', updateCalcPreview);
 
-  $('monthFilter').addEventListener('change', () => { renderDashboard(); renderTable(); });
+  $('monthFilter').addEventListener('change', () => { renderDashboard(); renderTable(); renderBreakdown(); });
   $('orgFilter').addEventListener('change', renderTable);
+  $('locationFilterSel').addEventListener('change', renderTable);
+  $('modeFilterSel').addEventListener('change', renderTable);
   $('exportBtn').addEventListener('click', onExport);
+
+  document.querySelectorAll('#sessionsTable thead th.sortable').forEach(th => {
+    th.addEventListener('click', () => setSort(th.dataset.sort));
+  });
 
   $('clientSearch').addEventListener('input', renderClientResults);
   $('toastUndo').addEventListener('click', undoDelete);
@@ -405,6 +411,15 @@ function renderOrgFilter() {
   sel.innerHTML = `<option value="">All referrers</option>` + DATA.referenceOptions.map(r =>
     `<option value="${escapeHtml(r)}">${escapeHtml(r)}</option>`).join('');
   sel.value = current;
+}
+
+function renderLocationFilter() {
+  const sel = $('locationFilterSel');
+  const current = sel.value;
+  const locs = [...new Set(DATA.sessions.map(s => s.location).filter(Boolean))].sort();
+  sel.innerHTML = `<option value="">All locations</option>` + locs.map(l =>
+    `<option value="${escapeHtml(l)}">${escapeHtml(l)}</option>`).join('');
+  sel.value = locs.includes(current) ? current : '';
 }
 
 function filteredSessions() {
