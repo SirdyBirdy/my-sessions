@@ -116,11 +116,14 @@ async function connectAndLoad() {
     renderReferenceOptions();
     renderMonthOptions();
     renderOrgFilter();
+    renderLocationFilter();
     renderDashboard();
     renderTable();
     renderTrendChart();
     renderClientResults();
+    renderBreakdown();
     updateLocationOptions();
+    updateSortHeaderUI();
   } catch (e) {
     console.error(e);
     setSyncStatus('connection failed', false);
@@ -280,11 +283,13 @@ function afterMutationRerender() {
   renderReferenceOptions();
   renderMonthOptions();
   renderOrgFilter();
+  renderLocationFilter();
   updateLocationOptions();
   renderDashboard();
   renderTable();
   renderTrendChart();
   renderClientResults();
+  renderBreakdown();
 }
 
 function resetForm() {
@@ -336,7 +341,7 @@ function deleteSession(id) {
   finalizePendingDelete(); // commit any earlier pending delete first
   const session = DATA.sessions[idx];
   DATA.sessions.splice(idx, 1);
-  renderDashboard(); renderTable(); renderTrendChart(); renderClientResults();
+  renderDashboard(); renderTable(); renderTrendChart(); renderClientResults(); renderBreakdown();
   showUndoToast(`Deleted "${session.session}"`);
   pendingDelete = {
     session, index: idx,
@@ -350,7 +355,7 @@ function undoDelete() {
   DATA.sessions.splice(pendingDelete.index, 0, pendingDelete.session);
   pendingDelete = null;
   hideToast();
-  renderDashboard(); renderTable(); renderTrendChart(); renderClientResults();
+  renderDashboard(); renderTable(); renderTrendChart(); renderClientResults(); renderBreakdown();
 }
 
 function finalizePendingDelete() {
@@ -361,7 +366,7 @@ function finalizePendingDelete() {
   saveData(`Delete session: ${removed.session}`).catch(() => {
     // save failed — restore locally so the entry isn't silently lost
     DATA.sessions.push(removed);
-    renderDashboard(); renderTable(); renderTrendChart(); renderClientResults();
+    renderDashboard(); renderTable(); renderTrendChart(); renderClientResults(); renderBreakdown();
     alert(`Could not save the deletion of "${removed.session}" — it has been restored.`);
   });
 }
@@ -422,13 +427,87 @@ function renderLocationFilter() {
   sel.value = locs.includes(current) ? current : '';
 }
 
+// ===== SORTING =====
+let sortKey = 'date';
+let sortDir = 'asc';
+
+function setSort(key) {
+  if (sortKey === key) {
+    sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+  } else {
+    sortKey = key;
+    sortDir = 'asc';
+  }
+  renderTable();
+  updateSortHeaderUI();
+}
+
+function updateSortHeaderUI() {
+  document.querySelectorAll('#sessionsTable thead th.sortable').forEach(th => {
+    th.classList.remove('sort-asc', 'sort-desc');
+    if (th.dataset.sort === sortKey) th.classList.add(sortDir === 'asc' ? 'sort-asc' : 'sort-desc');
+  });
+}
+
+function compareByKey(a, b, key) {
+  switch (key) {
+    case 'reference': return a.reference.localeCompare(b.reference);
+    case 'modeSession': return a.modeSession.localeCompare(b.modeSession);
+    case 'location': return a.location.localeCompare(b.location);
+    case 'date':
+    default: return a.date.localeCompare(b.date);
+  }
+}
+
 function filteredSessions() {
   const month = $('monthFilter').value;
   const org = $('orgFilter').value;
+  const location = $('locationFilterSel').value;
+  const mode = $('modeFilterSel').value;
   return DATA.sessions
     .filter(s => !month || monthKey(s.date) === month)
     .filter(s => !org || s.reference === org)
-    .sort((a, b) => a.date.localeCompare(b.date) || (a.createdAt || '').localeCompare(b.createdAt || ''));
+    .filter(s => !location || s.location === location)
+    .filter(s => !mode || s.modeSession === mode)
+    .sort((a, b) => {
+      const primary = compareByKey(a, b, sortKey) * (sortDir === 'asc' ? 1 : -1);
+      if (primary !== 0) return primary;
+      // stable tie-break so equal-value rows still land in a sensible order
+      return a.date.localeCompare(b.date) || (a.createdAt || '').localeCompare(b.createdAt || '');
+    });
+}
+
+// ===== BREAKDOWN STATS =====
+function groupBy(rows, keyFn) {
+  const map = {};
+  rows.forEach(s => {
+    const k = keyFn(s) || '\u2014';
+    map[k] = map[k] || { count: 0, toArmeet: 0 };
+    map[k].count++;
+    map[k].toArmeet += s.toArmeet;
+  });
+  return map;
+}
+
+function renderBreakdownRows(map, tagged) {
+  const entries = Object.entries(map).sort((a, b) => b[1].count - a[1].count);
+  if (!entries.length) return '<tr><td class="mini-empty" colspan="3">No sessions this month</td></tr>';
+  return entries.map(([name, v]) => `
+    <tr>
+      <td class="mini-name">${tagged ? `<span class="ref-tag ${refClass(name)}">${escapeHtml(name)}</span>` : escapeHtml(name)}</td>
+      <td>${v.count}</td>
+      <td>\u20b9${v.toArmeet.toLocaleString('en-IN')}</td>
+    </tr>
+  `).join('');
+}
+
+function renderBreakdown() {
+  const month = $('monthFilter').value;
+  const rows = DATA.sessions.filter(s => !month || monthKey(s.date) === month);
+
+  $('refBreakdownBody').innerHTML = renderBreakdownRows(groupBy(rows, s => s.reference), true);
+  $('locationBreakdownBody').innerHTML = renderBreakdownRows(groupBy(rows, s => s.location), false);
+  $('modeBreakdownBody').innerHTML = renderBreakdownRows(groupBy(rows, s => s.modeSession), false);
 }
 
 // ===== DASHBOARD =====
