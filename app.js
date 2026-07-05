@@ -1,10 +1,18 @@
 // ===== STATE =====
-let CONFIG = null;          // {owner, repo, branch, path, token}
-let SHA = null;             // current file sha on GitHub (null = file doesn't exist yet)
+let CONFIG = null;
+let SHA = null;
 let DATA = { sessions: [], referenceOptions: ['Namaste Psychology', 'MindWorks', 'Armeet'] };
 let saveQueue = Promise.resolve();
+let editingId = null;
+let sortKey = 'date';
+let sortDir = 'asc';
+let pendingDelete = null;
+let noticeTimer = null;
 
 const $ = (id) => document.getElementById(id);
+
+const EDIT_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
+const TRASH_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>';
 
 // ===== INIT =====
 window.addEventListener('DOMContentLoaded', () => {
@@ -12,44 +20,100 @@ window.addEventListener('DOMContentLoaded', () => {
   bindEvents();
   loadConfigFromStorage();
   renderReferenceOptions();
-  renderClientResults();
+  updateSortSelectUI();
 });
 
 function todayISO() {
-  const d = new Date();
-  return d.toISOString().slice(0, 10);
+  return new Date().toISOString().slice(0, 10);
 }
 
 function bindEvents() {
-  $('settingsBtn').addEventListener('click', () => $('settingsPanel').classList.toggle('hidden'));
-  $('cfgCancel').addEventListener('click', () => $('settingsPanel').classList.add('hidden'));
-  $('cfgSave').addEventListener('click', onSaveConfig);
+  // Tabs
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+  });
 
+  // Settings modal
+  $('settingsBtn').addEventListener('click', openSettings);
+  $('cfgCancel').addEventListener('click', closeSettings);
+  $('cfgSave').addEventListener('click', onSaveConfig);
+  $('settingsBackdrop').addEventListener('click', (e) => { if (e.target.id === 'settingsBackdrop') closeSettings(); });
+
+  // Filter sheet
+  $('filterBtn').addEventListener('click', openFilterSheet);
+  $('closeFilterSheetBtn').addEventListener('click', closeFilterSheet);
+  $('filterSheetBackdrop').addEventListener('click', (e) => { if (e.target.id === 'filterSheetBackdrop') closeFilterSheet(); });
+  $('clearFiltersBtn').addEventListener('click', () => {
+    $('orgFilter').value = '';
+    $('locationFilterSel').value = '';
+    $('modeFilterSel').value = '';
+    renderHistoryList();
+    updateFilterCount();
+  });
+
+  // Form
   $('sessionForm').addEventListener('submit', onAddSession);
   $('fReference').addEventListener('change', onReferenceChange);
   $('fReference').addEventListener('change', suggestCommission);
   $('fFee').addEventListener('input', updateCalcPreview);
   $('fCommission').addEventListener('input', updateCalcPreview);
+  $('cancelEditBtn').addEventListener('click', exitEditMode);
 
-  $('monthFilter').addEventListener('change', () => { renderDashboard(); renderTable(); renderBreakdown(); });
-  $('orgFilter').addEventListener('change', renderTable);
-  $('locationFilterSel').addEventListener('change', renderTable);
-  $('modeFilterSel').addEventListener('change', renderTable);
+  // Insights
+  $('monthFilter').addEventListener('change', () => { renderInsights(); renderBreakdown(); renderHistoryList(); });
+
+  // History toolbar
+  $('clientSearch').addEventListener('input', renderHistoryList);
+  $('orgFilter').addEventListener('change', () => { renderHistoryList(); updateFilterCount(); });
+  $('locationFilterSel').addEventListener('change', () => { renderHistoryList(); updateFilterCount(); });
+  $('modeFilterSel').addEventListener('change', () => { renderHistoryList(); updateFilterCount(); });
+  $('sortSelect').addEventListener('change', () => setSortFromSelect($('sortSelect').value));
+  $('sortDirBtn').addEventListener('click', toggleSortDir);
   $('exportBtn').addEventListener('click', onExport);
-
   document.querySelectorAll('#sessionsTable thead th.sortable').forEach(th => {
-    th.addEventListener('click', () => setSort(th.dataset.sort));
+    th.addEventListener('click', () => setSortFromHeader(th.dataset.sort));
   });
 
-  $('clientSearch').addEventListener('input', renderClientResults);
+  // Undo toast + notice
   $('toastUndo').addEventListener('click', undoDelete);
-  $('cancelEditBtn').addEventListener('click', exitEditMode);
+  $('noticeClose').addEventListener('click', hideNotice);
 }
+
+// ===== TABS =====
+function switchTab(tab) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  document.querySelectorAll('.tab-panel').forEach(p => {
+    const match = p.dataset.tabPanel === tab;
+    p.hidden = !match;
+    if (match) {
+      p.classList.remove('active');
+      void p.offsetWidth; // restart the fade-in animation
+      p.classList.add('active');
+    }
+  });
+}
+
+// ===== NOTICE BANNER (replaces alert()) =====
+function showNotice(message) {
+  $('noticeMsg').textContent = message;
+  $('notice').classList.remove('hidden');
+  clearTimeout(noticeTimer);
+  noticeTimer = setTimeout(hideNotice, 5500);
+}
+function hideNotice() {
+  $('notice').classList.add('hidden');
+}
+
+// ===== MODALS =====
+function openSettings() { $('settingsBackdrop').classList.remove('hidden'); }
+function closeSettings() { $('settingsBackdrop').classList.add('hidden'); }
+function openFilterSheet() { $('filterSheetBackdrop').classList.remove('hidden'); }
+function closeFilterSheet() { $('filterSheetBackdrop').classList.add('hidden'); }
 
 // ===== CONFIG =====
 function loadConfigFromStorage() {
   const raw = localStorage.getItem('ledger_config');
-  if (!raw) { setSyncStatus('not connected', false); return; }
+  if (!raw) { setSyncStatus('not connected', false); openSettings(); return; }
   CONFIG = JSON.parse(raw);
   $('cfgOwner').value = CONFIG.owner || '';
   $('cfgRepo').value = CONFIG.repo || '';
@@ -68,11 +132,11 @@ function onSaveConfig() {
     token: $('cfgToken').value.trim(),
   };
   if (!CONFIG.owner || !CONFIG.repo || !CONFIG.token) {
-    alert('Owner, repo, and token are required.');
+    showNotice('Owner, repo, and token are required.');
     return;
   }
   localStorage.setItem('ledger_config', JSON.stringify(CONFIG));
-  $('settingsPanel').classList.add('hidden');
+  closeSettings();
   connectAndLoad();
 }
 
@@ -113,21 +177,11 @@ async function connectAndLoad() {
       throw new Error(err.message || `GitHub returned ${res.status}`);
     }
     setSyncStatus(`${CONFIG.owner}/${CONFIG.repo}`, true);
-    renderReferenceOptions();
-    renderMonthOptions();
-    renderOrgFilter();
-    renderLocationFilter();
-    renderDashboard();
-    renderTable();
-    renderTrendChart();
-    renderClientResults();
-    renderBreakdown();
-    updateLocationOptions();
-    updateSortHeaderUI();
+    fullRerender();
   } catch (e) {
     console.error(e);
     setSyncStatus('connection failed', false);
-    alert('Could not connect: ' + e.message);
+    showNotice('Could not connect: ' + e.message);
   }
 }
 
@@ -152,7 +206,7 @@ async function doSave(message) {
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     setSyncStatus('save failed', false);
-    alert('Save failed: ' + (err.message || res.status));
+    showNotice('Save failed: ' + (err.message || res.status));
     throw new Error(err.message);
   }
   const json = await res.json();
@@ -170,12 +224,18 @@ function refClass(reference) {
   return 'other';
 }
 
+// The stored value stays "Armeet" (so existing data keeps working) —
+// this only controls what gets shown to a reader.
+function displayRef(reference) {
+  return refClass(reference) === 'armeet' ? 'Direct / Self-referred' : reference;
+}
+
 function renderReferenceOptions() {
   const sel = $('fReference');
   sel.innerHTML = '';
   DATA.referenceOptions.forEach(r => {
     const opt = document.createElement('option');
-    opt.value = r; opt.textContent = r;
+    opt.value = r; opt.textContent = displayRef(r);
     sel.appendChild(opt);
   });
   const newOpt = document.createElement('option');
@@ -216,11 +276,9 @@ function updateCalcPreview() {
 }
 
 // ===== ADD / EDIT SESSION =====
-let editingId = null;
-
 async function onAddSession(e) {
   e.preventDefault();
-  if (!CONFIG) { alert('Connect a repo first (Settings, top right).'); return; }
+  if (!CONFIG) { showNotice('Connect a repo first (Settings, top right).'); openSettings(); return; }
 
   let reference = $('fReference').value;
   if (reference === '__new__') {
@@ -248,7 +306,7 @@ async function onAddSession(e) {
   if (editingId) {
     const idx = DATA.sessions.findIndex(s => s.id === editingId);
     if (idx === -1) {
-      alert('This session no longer exists — it may have been deleted elsewhere.');
+      showNotice('This session no longer exists — it may have been deleted elsewhere.');
       exitEditMode();
       submitBtn.disabled = false;
       return;
@@ -258,9 +316,9 @@ async function onAddSession(e) {
     try {
       await saveData(`Edit session: ${fields.session}`);
       exitEditMode();
-      afterMutationRerender();
+      fullRerender();
     } catch (err) {
-      DATA.sessions[idx] = original; // rollback on failure
+      DATA.sessions[idx] = original;
     } finally {
       submitBtn.disabled = false;
     }
@@ -270,26 +328,28 @@ async function onAddSession(e) {
     try {
       await saveData(`Add session: ${session.session}`);
       resetForm();
-      afterMutationRerender();
+      fullRerender();
     } catch (err) {
-      DATA.sessions.pop(); // rollback on failure
+      DATA.sessions.pop();
     } finally {
       submitBtn.disabled = false;
     }
   }
 }
 
-function afterMutationRerender() {
+function fullRerender() {
   renderReferenceOptions();
   renderMonthOptions();
   renderOrgFilter();
   renderLocationFilter();
   updateLocationOptions();
-  renderDashboard();
-  renderTable();
+  renderInsights();
+  renderHistoryList();
   renderTrendChart();
-  renderClientResults();
   renderBreakdown();
+  updateFilterCount();
+  updateSortHeaderUI();
+  updateSortSelectUI();
 }
 
 function resetForm() {
@@ -303,6 +363,7 @@ function editSession(id) {
   const session = DATA.sessions.find(s => s.id === id);
   if (!session) return;
   editingId = id;
+  switchTab('log');
 
   $('fSession').value = session.session;
   $('fDate').value = session.date;
@@ -320,7 +381,7 @@ function editSession(id) {
   $('formSubmitBtn').textContent = 'Save changes';
   $('cancelEditBtn').classList.remove('hidden');
 
-  $('quickAdd').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 function exitEditMode() {
@@ -332,21 +393,17 @@ function exitEditMode() {
   resetForm();
 }
 
-let pendingDelete = null; // {session, index, timerId}
-
+// ===== DELETE (with undo) =====
 function deleteSession(id) {
   const idx = DATA.sessions.findIndex(s => s.id === id);
   if (idx === -1) return;
   if (editingId === id) exitEditMode();
-  finalizePendingDelete(); // commit any earlier pending delete first
+  finalizePendingDelete();
   const session = DATA.sessions[idx];
   DATA.sessions.splice(idx, 1);
-  renderDashboard(); renderTable(); renderTrendChart(); renderClientResults(); renderBreakdown();
+  fullRerender();
   showUndoToast(`Deleted "${session.session}"`);
-  pendingDelete = {
-    session, index: idx,
-    timerId: setTimeout(finalizePendingDelete, 5000),
-  };
+  pendingDelete = { session, index: idx, timerId: setTimeout(finalizePendingDelete, 5000) };
 }
 
 function undoDelete() {
@@ -355,7 +412,7 @@ function undoDelete() {
   DATA.sessions.splice(pendingDelete.index, 0, pendingDelete.session);
   pendingDelete = null;
   hideToast();
-  renderDashboard(); renderTable(); renderTrendChart(); renderClientResults(); renderBreakdown();
+  fullRerender();
 }
 
 function finalizePendingDelete() {
@@ -364,10 +421,9 @@ function finalizePendingDelete() {
   pendingDelete = null;
   hideToast();
   saveData(`Delete session: ${removed.session}`).catch(() => {
-    // save failed — restore locally so the entry isn't silently lost
     DATA.sessions.push(removed);
-    renderDashboard(); renderTable(); renderTrendChart(); renderClientResults(); renderBreakdown();
-    alert(`Could not save the deletion of "${removed.session}" — it has been restored.`);
+    fullRerender();
+    showNotice(`Could not save the deletion of "${removed.session}" — it has been restored.`);
   });
 }
 
@@ -379,12 +435,49 @@ function hideToast() {
   $('toast').classList.add('hidden');
 }
 
+// ===== SORTING =====
+function setSortFromHeader(key) {
+  if (sortKey === key) sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+  else { sortKey = key; sortDir = 'asc'; }
+  afterSortChange();
+}
+function setSortFromSelect(key) {
+  sortKey = key;
+  afterSortChange();
+}
+function toggleSortDir() {
+  sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+  afterSortChange();
+}
+function afterSortChange() {
+  renderHistoryList();
+  updateSortHeaderUI();
+  updateSortSelectUI();
+}
+function updateSortHeaderUI() {
+  document.querySelectorAll('#sessionsTable thead th.sortable').forEach(th => {
+    th.classList.remove('sort-asc', 'sort-desc');
+    if (th.dataset.sort === sortKey) th.classList.add(sortDir === 'asc' ? 'sort-asc' : 'sort-desc');
+  });
+}
+function updateSortSelectUI() {
+  $('sortSelect').value = sortKey;
+  $('sortDirIcon').style.transform = sortDir === 'desc' ? 'rotate(180deg)' : 'rotate(0deg)';
+}
+
+function compareByKey(a, b, key) {
+  switch (key) {
+    case 'reference': return a.reference.localeCompare(b.reference);
+    case 'modeSession': return a.modeSession.localeCompare(b.modeSession);
+    case 'location': return a.location.localeCompare(b.location);
+    case 'date':
+    default: return a.date.localeCompare(b.date);
+  }
+}
+
 // ===== FILTERS =====
 function monthKey(dateStr) { return dateStr ? dateStr.slice(0, 7) : ''; }
 
-// Sr. No is always derived from chronological order across ALL sessions —
-// oldest date is #1 — regardless of the order entries were added in.
-// Ties on the same date fall back to createdAt (add order) for stability.
 function computeSrNoMap() {
   const sorted = [...DATA.sessions].sort((a, b) =>
     a.date.localeCompare(b.date) || (a.createdAt || '').localeCompare(b.createdAt || ''));
@@ -414,7 +507,7 @@ function renderOrgFilter() {
   const sel = $('orgFilter');
   const current = sel.value;
   sel.innerHTML = `<option value="">All referrers</option>` + DATA.referenceOptions.map(r =>
-    `<option value="${escapeHtml(r)}">${escapeHtml(r)}</option>`).join('');
+    `<option value="${escapeHtml(r)}">${escapeHtml(displayRef(r))}</option>`).join('');
   sel.value = current;
 }
 
@@ -427,36 +520,11 @@ function renderLocationFilter() {
   sel.value = locs.includes(current) ? current : '';
 }
 
-// ===== SORTING =====
-let sortKey = 'date';
-let sortDir = 'asc';
-
-function setSort(key) {
-  if (sortKey === key) {
-    sortDir = sortDir === 'asc' ? 'desc' : 'asc';
-  } else {
-    sortKey = key;
-    sortDir = 'asc';
-  }
-  renderTable();
-  updateSortHeaderUI();
-}
-
-function updateSortHeaderUI() {
-  document.querySelectorAll('#sessionsTable thead th.sortable').forEach(th => {
-    th.classList.remove('sort-asc', 'sort-desc');
-    if (th.dataset.sort === sortKey) th.classList.add(sortDir === 'asc' ? 'sort-asc' : 'sort-desc');
-  });
-}
-
-function compareByKey(a, b, key) {
-  switch (key) {
-    case 'reference': return a.reference.localeCompare(b.reference);
-    case 'modeSession': return a.modeSession.localeCompare(b.modeSession);
-    case 'location': return a.location.localeCompare(b.location);
-    case 'date':
-    default: return a.date.localeCompare(b.date);
-  }
+function updateFilterCount() {
+  const count = [$('orgFilter').value, $('locationFilterSel').value, $('modeFilterSel').value].filter(Boolean).length;
+  const el = $('filterCount');
+  if (count > 0) { el.textContent = count; el.classList.remove('hidden'); }
+  else el.classList.add('hidden');
 }
 
 function filteredSessions() {
@@ -464,130 +532,37 @@ function filteredSessions() {
   const org = $('orgFilter').value;
   const location = $('locationFilterSel').value;
   const mode = $('modeFilterSel').value;
+  const q = $('clientSearch').value.trim().toLowerCase();
+  const monthActive = !q && month; // a name search intentionally spans all time
+
   return DATA.sessions
-    .filter(s => !month || monthKey(s.date) === month)
+    .filter(s => !monthActive || monthKey(s.date) === month)
     .filter(s => !org || s.reference === org)
     .filter(s => !location || s.location === location)
     .filter(s => !mode || s.modeSession === mode)
+    .filter(s => !q || s.session.toLowerCase().includes(q))
     .sort((a, b) => {
       const primary = compareByKey(a, b, sortKey) * (sortDir === 'asc' ? 1 : -1);
       if (primary !== 0) return primary;
-      // stable tie-break so equal-value rows still land in a sensible order
       return a.date.localeCompare(b.date) || (a.createdAt || '').localeCompare(b.createdAt || '');
     });
 }
 
-// ===== BREAKDOWN STATS =====
-function groupBy(rows, keyFn) {
-  const map = {};
-  rows.forEach(s => {
-    const k = keyFn(s) || '\u2014';
-    map[k] = map[k] || { count: 0, toArmeet: 0 };
-    map[k].count++;
-    map[k].toArmeet += s.toArmeet;
-  });
-  return map;
-}
-
-function renderBreakdownRows(map, tagged) {
-  const entries = Object.entries(map).sort((a, b) => b[1].count - a[1].count);
-  if (!entries.length) return '<tr><td class="mini-empty" colspan="3">No sessions this month</td></tr>';
-  return entries.map(([name, v]) => `
-    <tr>
-      <td class="mini-name">${tagged ? `<span class="ref-tag ${refClass(name)}">${escapeHtml(name)}</span>` : escapeHtml(name)}</td>
-      <td>${v.count}</td>
-      <td>\u20b9${v.toArmeet.toLocaleString('en-IN')}</td>
-    </tr>
-  `).join('');
-}
-
-function renderBreakdown() {
+// ===== INSIGHTS (hero + trend + breakdown) =====
+function renderInsights() {
   const month = $('monthFilter').value;
   const rows = DATA.sessions.filter(s => !month || monthKey(s.date) === month);
-
-  $('refBreakdownBody').innerHTML = renderBreakdownRows(groupBy(rows, s => s.reference), true);
-  $('locationBreakdownBody').innerHTML = renderBreakdownRows(groupBy(rows, s => s.location), false);
-  $('modeBreakdownBody').innerHTML = renderBreakdownRows(groupBy(rows, s => s.modeSession), false);
-}
-
-// ===== DASHBOARD =====
-function renderDashboard() {
-  const month = $('monthFilter').value;
-  const rows = DATA.sessions.filter(s => !month || monthKey(s.date) === month);
-
   const totalFee = rows.reduce((sum, s) => sum + s.fee, 0);
   const totalToArmeet = rows.reduce((sum, s) => sum + s.toArmeet, 0);
 
-  const byRef = {};
-  rows.forEach(s => {
-    byRef[s.reference] = byRef[s.reference] || { count: 0, toOrg: 0, fee: 0 };
-    byRef[s.reference].count++;
-    byRef[s.reference].toOrg += s.toOrg;
-    byRef[s.reference].fee += s.fee;
-  });
-
-  let html = `
-    <div class="card">
-      <div class="card-label">Sessions</div>
-      <div class="card-value">${rows.length}</div>
-      <div class="card-sub">${formatMonth(month) || 'all time'}</div>
-    </div>
-    <div class="card">
-      <div class="card-label">Total fee collected</div>
-      <div class="card-value">₹${totalFee.toLocaleString('en-IN')}</div>
-    </div>
-    <div class="card armeet">
-      <div class="card-label">Your earnings</div>
-      <div class="card-value">₹${totalToArmeet.toLocaleString('en-IN')}</div>
-    </div>`;
-
-  Object.entries(byRef).forEach(([ref, v]) => {
-    html += `
-    <div class="card ${refClass(ref)}">
-      <div class="card-label">${escapeHtml(ref)}</div>
-      <div class="card-value">₹${v.toOrg.toLocaleString('en-IN')}</div>
-      <div class="card-sub">${v.count} session${v.count === 1 ? '' : 's'} owed to them</div>
-    </div>`;
-  });
-
-  $('summaryCards').innerHTML = html;
+  $('heroMonthLabel').textContent = month ? formatMonth(month) : 'all time';
+  const hv = $('heroValue');
+  hv.style.opacity = '0';
+  hv.textContent = `₹${totalToArmeet.toLocaleString('en-IN')}`;
+  requestAnimationFrame(() => { hv.style.opacity = '1'; });
+  $('heroSub').textContent = `${rows.length} session${rows.length === 1 ? '' : 's'} · ₹${totalFee.toLocaleString('en-IN')} collected`;
 }
 
-// ===== TABLE =====
-function renderTable() {
-  const rows = filteredSessions();
-  const srNoMap = computeSrNoMap();
-  $('emptyState').classList.toggle('hidden', rows.length > 0);
-  $('tableBody').innerHTML = rows.map(s => `
-    <tr>
-      <td>${srNoMap.get(s.id)}</td>
-      <td class="session-name">${escapeHtml(s.session)}</td>
-      <td>${formatDate(s.date)}</td>
-      <td><span class="ref-tag ${refClass(s.reference)}">${escapeHtml(s.reference)}</span></td>
-      <td>${s.modeSession}</td>
-      <td>${escapeHtml(s.location)}</td>
-      <td>₹${s.fee.toLocaleString('en-IN')}</td>
-      <td>${s.commissionRate}%</td>
-      <td>₹${s.toOrg.toLocaleString('en-IN')}</td>
-      <td>₹${s.toArmeet.toLocaleString('en-IN')}</td>
-      <td><div class="row-actions">
-        <button class="icon-btn icon-btn-edit" onclick="editSession('${s.id}')" title="Edit">✎</button>
-        <button class="icon-btn" onclick="deleteSession('${s.id}')" title="Delete">✕</button>
-      </div></td>
-    </tr>
-  `).join('');
-}
-
-function formatDate(iso) {
-  const d = new Date(iso + 'T00:00:00');
-  return d.toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' });
-}
-
-function escapeHtml(str) {
-  return String(str).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-}
-
-// ===== TREND CHART =====
 function renderTrendChart() {
   const container = $('trendChart');
   if (!DATA.sessions.length) {
@@ -609,7 +584,7 @@ function renderTrendChart() {
 
   const bars = months.map((m, i) => {
     const v = values[i];
-    const h = v ? Math.max(Math.round((v / max) * 130), 2) : 2;
+    const h = v ? Math.max(Math.round((v / max) * 120), 2) : 2;
     const [y, mo] = m.split('-');
     const label = new Date(y, mo - 1, 1).toLocaleString('en-IN', { month: 'short' });
     return `<div class="trend-bar-col">
@@ -622,64 +597,126 @@ function renderTrendChart() {
   container.innerHTML = `<div class="trend-bars-row">${bars}</div>`;
 }
 
-// ===== CLIENT LOOKUP =====
-function renderClientResults() {
-  const q = $('clientSearch').value.trim().toLowerCase();
-  const resultsEl = $('clientResults');
+function groupBy(rows, keyFn) {
+  const map = {};
+  rows.forEach(s => {
+    const k = keyFn(s) || '\u2014';
+    map[k] = map[k] || { count: 0, toOrg: 0, toArmeet: 0 };
+    map[k].count++;
+    map[k].toOrg += s.toOrg;
+    map[k].toArmeet += s.toArmeet;
+  });
+  return map;
+}
 
-  if (!q) {
-    resultsEl.innerHTML = '<p class="client-hint">Start typing to see a client\u2019s full session history.</p>';
-    return;
-  }
-
-  const matches = DATA.sessions
-    .filter(s => s.session.toLowerCase().includes(q))
-    .sort((a, b) => b.date.localeCompare(a.date));
-
-  if (!matches.length) {
-    resultsEl.innerHTML = `<p class="client-hint">No sessions found matching "${escapeHtml(q)}".</p>`;
-    return;
-  }
-
-  const totalArmeet = matches.reduce((sum, s) => sum + s.toArmeet, 0);
-  const firstDate = matches[matches.length - 1].date;
-  const lastDate = matches[0].date;
-
-  const summary = `<div class="client-results-summary">
-    ${matches.length} session${matches.length === 1 ? '' : 's'} ·
-    ₹${totalArmeet.toLocaleString('en-IN')} earned ·
-    first seen ${formatDate(firstDate)} · most recent ${formatDate(lastDate)}
-  </div>`;
-
-  const list = matches.map(s => `
-    <li>
-      <div class="chd-left">
-        <span>${escapeHtml(s.session)}</span>
-        <span class="chd-date">${formatDate(s.date)} ·
-          <span class="ref-tag ${refClass(s.reference)}">${escapeHtml(s.reference)}</span> ·
-          ${s.modeSession} · ${escapeHtml(s.location)}
-        </span>
-      </div>
-      <div class="chd-right">₹${s.fee.toLocaleString('en-IN')}<br>
-        <span style="color:var(--ink-faint);font-size:11px;">to you ₹${s.toArmeet.toLocaleString('en-IN')}</span>
-      </div>
-    </li>
+function renderBreakdownRows(map, tagged) {
+  const entries = Object.entries(map).sort((a, b) => b[1].count - a[1].count);
+  if (!entries.length) return '<tr><td class="mini-empty" colspan="4">No sessions this month</td></tr>';
+  return entries.map(([name, v]) => `
+    <tr>
+      <td class="mini-name">${tagged ? `<span class="ref-tag ${refClass(name)}">${escapeHtml(displayRef(name))}</span>` : escapeHtml(name)}</td>
+      <td>${v.count}</td>
+      <td>\u20b9${v.toOrg.toLocaleString('en-IN')}</td>
+      <td>\u20b9${v.toArmeet.toLocaleString('en-IN')}</td>
+    </tr>
   `).join('');
+}
 
-  resultsEl.innerHTML = summary + `<ul class="client-history-list">${list}</ul>`;
+function renderBreakdown() {
+  const month = $('monthFilter').value;
+  const rows = DATA.sessions.filter(s => !month || monthKey(s.date) === month);
+  $('refBreakdownBody').innerHTML = renderBreakdownRows(groupBy(rows, s => s.reference), true);
+  $('locationBreakdownBody').innerHTML = renderBreakdownRows(groupBy(rows, s => s.location), false);
+  $('modeBreakdownBody').innerHTML = renderBreakdownRows(groupBy(rows, s => s.modeSession), false);
+}
+
+// ===== HISTORY LIST (table + cards, unified) =====
+function renderHistoryList() {
+  const rows = filteredSessions();
+  const srNoMap = computeSrNoMap();
+  $('emptyState').classList.toggle('hidden', rows.length > 0);
+
+  $('tableBody').innerHTML = rows.map((s, i) => renderTableRow(s, srNoMap.get(s.id), i)).join('');
+  $('sessionCards').innerHTML = rows.map((s, i) => renderCard(s, srNoMap.get(s.id), i)).join('');
+
+  renderSearchSummary(rows);
+}
+
+function renderTableRow(s, srNo, i) {
+  return `<tr style="animation-delay:${Math.min(i * 18, 300)}ms">
+    <td>${srNo}</td>
+    <td class="session-name">${escapeHtml(s.session)}</td>
+    <td>${formatDate(s.date)}</td>
+    <td><span class="ref-tag ${refClass(s.reference)}">${escapeHtml(displayRef(s.reference))}</span></td>
+    <td>${s.modeSession}</td>
+    <td>${escapeHtml(s.location)}</td>
+    <td>₹${s.fee.toLocaleString('en-IN')}</td>
+    <td>${s.commissionRate}%</td>
+    <td>₹${s.toOrg.toLocaleString('en-IN')}</td>
+    <td>₹${s.toArmeet.toLocaleString('en-IN')}</td>
+    <td><div class="row-actions">
+      <button class="icon-btn icon-btn-edit" onclick="editSession('${s.id}')" title="Edit">${EDIT_ICON}</button>
+      <button class="icon-btn" onclick="deleteSession('${s.id}')" title="Delete">${TRASH_ICON}</button>
+    </div></td>
+  </tr>`;
+}
+
+function renderCard(s, srNo, i) {
+  return `<div class="session-card" style="animation-delay:${Math.min(i * 18, 300)}ms">
+    <div class="sc-top">
+      <span class="sc-name">${escapeHtml(s.session)}</span>
+      <span class="sc-amount">₹${s.toArmeet.toLocaleString('en-IN')}</span>
+    </div>
+    <div class="sc-meta">
+      <span class="ref-tag ${refClass(s.reference)}">${escapeHtml(displayRef(s.reference))}</span>
+      <span class="sc-dot">·</span><span>${formatDate(s.date)}</span>
+      <span class="sc-dot">·</span><span>${s.modeSession}</span>
+      <span class="sc-dot">·</span><span>${escapeHtml(s.location)}</span>
+    </div>
+    <div class="sc-bottom">
+      <span class="sc-fee">#${srNo} · Fee ₹${s.fee.toLocaleString('en-IN')} · ${s.commissionRate}%</span>
+      <div class="sc-actions">
+        <button class="icon-btn icon-btn-edit" onclick="editSession('${s.id}')" title="Edit">${EDIT_ICON}</button>
+        <button class="icon-btn" onclick="deleteSession('${s.id}')" title="Delete">${TRASH_ICON}</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderSearchSummary(rows) {
+  const q = $('clientSearch').value.trim();
+  const el = $('searchSummary');
+  if (!q) { el.classList.add('hidden'); return; }
+  if (!rows.length) {
+    el.textContent = `No sessions found matching "${q}".`;
+    el.classList.remove('hidden');
+    return;
+  }
+  const totalArmeet = rows.reduce((sum, s) => sum + s.toArmeet, 0);
+  el.textContent = `${rows.length} session${rows.length === 1 ? '' : 's'} matching "${q}" · ₹${totalArmeet.toLocaleString('en-IN')} earned`;
+  el.classList.remove('hidden');
+}
+
+function formatDate(iso) {
+  const d = new Date(iso + 'T00:00:00');
+  return d.toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function escapeHtml(str) {
+  return String(str).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
 // ===== EXPORT =====
 function onExport() {
   const rows = filteredSessions();
-  if (!rows.length) { alert('Nothing to export for this filter.'); return; }
+  if (!rows.length) { showNotice('Nothing to export for this filter.'); return; }
   const srNoMap = computeSrNoMap();
 
   const sheetRows = rows.map(s => ({
     'Sr. No': srNoMap.get(s.id),
     'Session': s.session,
     'Date': formatDate(s.date),
-    'Mode of Reference': s.reference,
+    'Mode of Reference': displayRef(s.reference),
     'Mode of Session': s.modeSession,
     'Location': s.location,
     'Fee': s.fee,
