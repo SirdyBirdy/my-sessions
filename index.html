@@ -13,7 +13,7 @@
 
 <div id="app">
 
-  <!-- ===== HEADER ===== -->
+  <!-- ===== TOPBAR ===== -->
   <header class="topbar">
     <div class="brand">
       <span class="brand-mark">§</span>
@@ -27,60 +27,41 @@
         <span class="dot" id="syncDot"></span>
         <span id="syncLabel">not connected</span>
       </div>
-      <button class="btn btn-ghost" id="settingsBtn" title="Connection settings">Settings</button>
+      <button class="icon-btn-round" id="settingsBtn" title="Settings" aria-label="Settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"/><path d="M19.4 13a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V19a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H4a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H10a1.65 1.65 0 0 0 1-1.51V4a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V10a1.65 1.65 0 0 0 1.51 1H20a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg>
+      </button>
     </div>
   </header>
 
-  <!-- ===== SETTINGS PANEL (hidden by default) ===== -->
-  <section class="panel settings-panel hidden" id="settingsPanel">
-    <h2>Connect your GitHub repo</h2>
-    <p class="hint">Data is stored as <code>data/sessions.json</code> inside a repo you own — read and written directly via the GitHub API. Your token stays only in this browser's local storage; it is never uploaded anywhere except directly to GitHub.</p>
-    <div class="grid-2">
-      <label>GitHub username / org
-        <input type="text" id="cfgOwner" placeholder="armeet">
-      </label>
-      <label>Repository name
-        <input type="text" id="cfgRepo" placeholder="sessions-tracker">
-      </label>
-      <label>Branch
-        <input type="text" id="cfgBranch" placeholder="main" value="main">
-      </label>
-      <label>Data file path
-        <input type="text" id="cfgPath" placeholder="data/sessions.json" value="data/sessions.json">
-      </label>
-    </div>
-    <label class="full">Personal access token (fine-grained, Contents: Read & write, scoped to this one repo)
-      <input type="password" id="cfgToken" placeholder="github_pat_...">
-    </label>
-    <p class="hint">Create one at github.com → Settings → Developer settings → Fine-grained tokens. Grant it access to only this repository, with Contents permission set to Read and write.</p>
-    <div class="panel-actions">
-      <button class="btn btn-primary" id="cfgSave">Save & connect</button>
-      <button class="btn btn-ghost" id="cfgCancel">Cancel</button>
-    </div>
-  </section>
+  <!-- ===== TAB BAR ===== -->
+  <nav class="tabbar" id="tabbar">
+    <button class="tab-btn active" data-tab="log">Log</button>
+    <button class="tab-btn" data-tab="insights">Insights</button>
+    <button class="tab-btn" data-tab="history">History</button>
+  </nav>
 
   <main class="content">
 
-    <!-- ===== QUICK ADD ===== -->
-    <section class="panel quick-add" id="quickAdd">
-      <div class="table-header">
-        <h2 id="formTitle">New session</h2>
-        <span class="edit-badge hidden" id="editBadge">Editing #<span id="editSrNo"></span></span>
-      </div>
-      <form id="sessionForm">
-        <div class="grid-form">
+    <!-- ===== TAB: LOG ===== -->
+    <section class="tab-panel active" data-tab-panel="log" id="tabLog">
+      <form id="sessionForm" class="log-form">
+        <div class="form-heading">
+          <h2 id="formTitle">New session</h2>
+          <span class="edit-badge hidden" id="editBadge">Editing #<span id="editSrNo"></span></span>
+        </div>
+
+        <div class="field-group">
           <label>Session
             <input type="text" id="fSession" placeholder="Client name with referrer initials" required>
           </label>
           <label>Date
             <input type="date" id="fDate" required>
           </label>
+        </div>
+
+        <div class="field-group cols-2">
           <label>Referred via
             <select id="fReference" required></select>
-          </label>
-          <label class="new-ref-row hidden" id="newRefRow">
-            New source name
-            <input type="text" id="fNewReference" placeholder="e.g. Mann Clinic">
           </label>
           <label>Mode
             <select id="fModeSession" required>
@@ -88,10 +69,20 @@
               <option value="Offline">Offline</option>
             </select>
           </label>
+        </div>
+
+        <label class="new-ref-row hidden" id="newRefRow">New source name
+          <input type="text" id="fNewReference" placeholder="e.g. Mann Clinic">
+        </label>
+
+        <div class="field-group">
           <label>Location
             <input type="text" id="fLocation" list="locationOptions" placeholder="Home / Camp / Clinic name" required>
             <datalist id="locationOptions"></datalist>
           </label>
+        </div>
+
+        <div class="field-group cols-2">
           <label>Fee (₹)
             <input type="number" id="fFee" min="0" step="1" required>
           </label>
@@ -99,8 +90,10 @@
             <input type="number" id="fCommission" min="0" max="100" step="0.01" required>
           </label>
         </div>
+
         <div class="calc-preview" id="calcPreview">To organisation ₹0 · To Armeet ₹0</div>
-        <div class="panel-actions">
+
+        <div class="form-actions">
           <button type="submit" class="btn btn-primary" id="formSubmitBtn">Add session</button>
           <button type="button" class="btn btn-ghost hidden" id="cancelEditBtn">Cancel edit</button>
           <span class="save-state" id="saveState"></span>
@@ -108,83 +101,79 @@
       </form>
     </section>
 
-    <!-- ===== DASHBOARD ===== -->
-    <section class="dashboard">
-      <div class="dash-header">
-        <h2>Month summary</h2>
-        <select id="monthFilter"></select>
-      </div>
-      <div class="cards" id="summaryCards"></div>
-      <div class="panel trend-panel">
-        <div class="table-header">
-          <h2>Earnings trend</h2>
-          <span class="hint" style="margin:0;">your take-home, last 12 months</span>
+    <!-- ===== TAB: INSIGHTS ===== -->
+    <section class="tab-panel" data-tab-panel="insights" id="tabInsights" hidden>
+
+      <div class="hero-row">
+        <div class="hero-stat">
+          <div class="hero-label">Your earnings — <span id="heroMonthLabel"></span></div>
+          <div class="hero-value" id="heroValue">₹0</div>
+          <div class="hero-sub" id="heroSub"></div>
         </div>
+        <select id="monthFilter" class="month-select"></select>
+      </div>
+
+      <div class="section">
+        <div class="section-title">Earnings trend <span class="section-hint">last 12 months</span></div>
         <div id="trendChart"></div>
       </div>
-    </section>
 
-    <!-- ===== CLIENT LOOKUP ===== -->
-    <section class="panel client-lookup">
-      <h2>Client history</h2>
-      <input type="text" id="clientSearch" placeholder="Type a client name to see their session history…">
-      <div id="clientResults"></div>
-    </section>
-
-    <!-- ===== BREAKDOWN STATS ===== -->
-    <section class="panel breakdown-panel">
-      <div class="table-header">
-        <h2>Breakdown</h2>
-        <span class="hint" style="margin:0;">for the month selected above</span>
-      </div>
-      <div class="breakdown-grid">
-        <div class="breakdown-col">
-          <h3>By referrer</h3>
-          <table class="mini-table">
-            <thead><tr><th></th><th>Sessions</th><th>Earned</th></tr></thead>
-            <tbody id="refBreakdownBody"></tbody>
-          </table>
-        </div>
-        <div class="breakdown-col">
-          <h3>By location</h3>
-          <table class="mini-table">
-            <thead><tr><th></th><th>Sessions</th><th>Earned</th></tr></thead>
-            <tbody id="locationBreakdownBody"></tbody>
-          </table>
-        </div>
-        <div class="breakdown-col">
-          <h3>By mode</h3>
-          <table class="mini-table">
-            <thead><tr><th></th><th>Sessions</th><th>Earned</th></tr></thead>
-            <tbody id="modeBreakdownBody"></tbody>
-          </table>
-        </div>
-      </div>
-    </section>
-
-    <!-- ===== TABLE ===== -->
-    <section class="panel table-panel">
-      <div class="table-header">
-        <h2>Sessions</h2>
-        <div class="table-tools">
-          <select id="orgFilter">
-            <option value="">All referrers</option>
-          </select>
-          <select id="locationFilterSel">
-            <option value="">All locations</option>
-          </select>
-          <select id="modeFilterSel">
-            <option value="">All modes</option>
-            <option value="Online">Online</option>
-            <option value="Offline">Offline</option>
-          </select>
-          <div class="export-group">
-            <button class="btn btn-ghost" id="exportBtn">Export .xlsx</button>
+      <div class="section">
+        <div class="section-title">Breakdown</div>
+        <div class="breakdown-grid">
+          <div class="breakdown-col">
+            <h3>Referrer</h3>
+            <table class="mini-table">
+              <thead><tr><th></th><th>#</th><th>Owed</th><th>Yours</th></tr></thead>
+              <tbody id="refBreakdownBody"></tbody>
+            </table>
+          </div>
+          <div class="breakdown-col">
+            <h3>Location</h3>
+            <table class="mini-table">
+              <thead><tr><th></th><th>#</th><th>Owed</th><th>Yours</th></tr></thead>
+              <tbody id="locationBreakdownBody"></tbody>
+            </table>
+          </div>
+          <div class="breakdown-col">
+            <h3>Mode</h3>
+            <table class="mini-table">
+              <thead><tr><th></th><th>#</th><th>Owed</th><th>Yours</th></tr></thead>
+              <tbody id="modeBreakdownBody"></tbody>
+            </table>
           </div>
         </div>
       </div>
-      <p class="hint" style="margin:-8px 0 12px;">Click a column header to sort by it.</p>
-      <div class="table-wrap">
+
+    </section>
+
+    <!-- ===== TAB: HISTORY ===== -->
+    <section class="tab-panel" data-tab-panel="history" id="tabHistory" hidden>
+
+      <div class="history-toolbar">
+        <div class="search-field">
+          <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.35-4.35"/></svg>
+          <input type="text" id="clientSearch" placeholder="Search by client name…">
+        </div>
+        <div class="toolbar-buttons">
+          <select id="sortSelect" class="sort-select">
+            <option value="date">Date</option>
+            <option value="reference">Referrer</option>
+            <option value="modeSession">Mode</option>
+            <option value="location">Location</option>
+          </select>
+          <button class="icon-btn-round" id="sortDirBtn" title="Toggle sort direction">
+            <svg id="sortDirIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+          </button>
+          <button class="btn btn-ghost" id="filterBtn">Filters<span class="filter-count hidden" id="filterCount"></span></button>
+          <button class="btn btn-ghost" id="exportBtn">Export</button>
+        </div>
+      </div>
+
+      <p class="search-summary hidden" id="searchSummary"></p>
+
+      <!-- Desktop table -->
+      <div class="table-wrap desktop-only">
         <table id="sessionsTable">
           <thead>
             <tr>
@@ -199,13 +188,80 @@
           </thead>
           <tbody id="tableBody"></tbody>
         </table>
-        <p class="empty-state hidden" id="emptyState">No sessions logged for this filter yet. Add one above.</p>
       </div>
+
+      <!-- Mobile card list -->
+      <div class="session-cards mobile-only" id="sessionCards"></div>
+
+      <p class="empty-state hidden" id="emptyState">No sessions match this filter yet.</p>
+
     </section>
 
   </main>
 </div>
 
+<!-- ===== SETTINGS MODAL ===== -->
+<div class="modal-backdrop hidden" id="settingsBackdrop">
+  <div class="modal">
+    <h2>Connect your GitHub repo</h2>
+    <p class="hint">Data is stored as <code>data/sessions.json</code> inside a repo you own — read and written directly via the GitHub API. Your token stays only in this browser's local storage.</p>
+    <div class="field-group cols-2">
+      <label>GitHub username / org
+        <input type="text" id="cfgOwner" placeholder="armeet">
+      </label>
+      <label>Repository name
+        <input type="text" id="cfgRepo" placeholder="my-sessions-data">
+      </label>
+      <label>Branch
+        <input type="text" id="cfgBranch" placeholder="main" value="main">
+      </label>
+      <label>Data file path
+        <input type="text" id="cfgPath" placeholder="data/sessions.json" value="data/sessions.json">
+      </label>
+    </div>
+    <label class="full">Personal access token (fine-grained, Contents: Read & write)
+      <input type="password" id="cfgToken" placeholder="github_pat_...">
+    </label>
+    <p class="hint">Create one at github.com → Settings → Developer settings → Fine-grained tokens.</p>
+    <div class="modal-actions">
+      <button class="btn btn-primary" id="cfgSave">Save & connect</button>
+      <button class="btn btn-ghost" id="cfgCancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== FILTER SHEET ===== -->
+<div class="sheet-backdrop hidden" id="filterSheetBackdrop">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <h2>Filter sessions</h2>
+    <label>Referrer
+      <select id="orgFilter"><option value="">All referrers</option></select>
+    </label>
+    <label>Location
+      <select id="locationFilterSel"><option value="">All locations</option></select>
+    </label>
+    <label>Mode
+      <select id="modeFilterSel">
+        <option value="">All modes</option>
+        <option value="Online">Online</option>
+        <option value="Offline">Offline</option>
+      </select>
+    </label>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="clearFiltersBtn">Clear filters</button>
+      <button class="btn btn-primary" id="closeFilterSheetBtn">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== NOTICE BANNER (replaces browser alert) ===== -->
+<div class="notice hidden" id="notice">
+  <span id="noticeMsg"></span>
+  <button class="notice-close" id="noticeClose" aria-label="Dismiss">&times;</button>
+</div>
+
+<!-- ===== UNDO TOAST ===== -->
 <div class="toast hidden" id="toast">
   <span id="toastMsg"></span>
   <button class="btn btn-small btn-primary" id="toastUndo">Undo</button>
