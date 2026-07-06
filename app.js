@@ -77,6 +77,13 @@ function bindEvents() {
   // Undo toast + notice
   $('toastUndo').addEventListener('click', undoDelete);
   $('noticeClose').addEventListener('click', hideNotice);
+
+  // Calendar picker
+  $('fDate').addEventListener('click', openCalendar);
+  $('calPrevBtn').addEventListener('click', () => navCalendar(-1));
+  $('calNextBtn').addEventListener('click', () => navCalendar(1));
+  $('calTodayBtn').addEventListener('click', () => selectCalendarDay(todayISO()));
+  $('calendarBackdrop').addEventListener('click', (e) => { if (e.target.id === 'calendarBackdrop') closeCalendar(); });
 }
 
 // ===== TABS =====
@@ -109,6 +116,52 @@ function openSettings() { $('settingsBackdrop').classList.remove('hidden'); }
 function closeSettings() { $('settingsBackdrop').classList.add('hidden'); }
 function openFilterSheet() { $('filterSheetBackdrop').classList.remove('hidden'); }
 function closeFilterSheet() { $('filterSheetBackdrop').classList.add('hidden'); }
+
+// ===== CALENDAR PICKER =====
+let calendarViewYear, calendarViewMonth;
+
+function openCalendar() {
+  const iso = $('fDate').value || todayISO();
+  const d = new Date(iso + 'T00:00:00');
+  calendarViewYear = d.getFullYear();
+  calendarViewMonth = d.getMonth();
+  renderCalendar();
+  $('calendarBackdrop').classList.remove('hidden');
+}
+function closeCalendar() { $('calendarBackdrop').classList.add('hidden'); }
+
+function navCalendar(delta) {
+  calendarViewMonth += delta;
+  if (calendarViewMonth < 0) { calendarViewMonth = 11; calendarViewYear--; }
+  if (calendarViewMonth > 11) { calendarViewMonth = 0; calendarViewYear++; }
+  renderCalendar();
+}
+
+function renderCalendar() {
+  const selectedISO = $('fDate').value;
+  const todayIso = todayISO();
+  const first = new Date(calendarViewYear, calendarViewMonth, 1);
+  const startDow = first.getDay();
+  const daysInMonth = new Date(calendarViewYear, calendarViewMonth + 1, 0).getDate();
+
+  $('calTitle').textContent = first.toLocaleString('en-IN', { month: 'long', year: 'numeric' });
+
+  let cells = '';
+  for (let i = 0; i < startDow; i++) cells += '<span class="cal-day cal-day-empty"></span>';
+  for (let day = 1; day <= daysInMonth; day++) {
+    const iso = `${calendarViewYear}-${String(calendarViewMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const classes = ['cal-day'];
+    if (iso === selectedISO) classes.push('selected');
+    if (iso === todayIso) classes.push('today');
+    cells += `<button type="button" class="${classes.join(' ')}" onclick="selectCalendarDay('${iso}')">${day}</button>`;
+  }
+  $('calGrid').innerHTML = cells;
+}
+
+function selectCalendarDay(iso) {
+  $('fDate').value = iso;
+  closeCalendar();
+}
 
 // ===== CONFIG =====
 function loadConfigFromStorage() {
