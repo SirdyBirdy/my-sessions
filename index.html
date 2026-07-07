@@ -117,6 +117,14 @@
       </div>
 
       <div class="section">
+        <div class="section-title">Financial year <span class="section-hint">Apr–Mar</span></div>
+        <div class="fy-row">
+          <select id="fyFilter" class="month-select"></select>
+          <div class="fy-stats" id="fyStats"></div>
+        </div>
+      </div>
+
+      <div class="section">
         <div class="section-title">Earnings trend <span class="section-hint">last 12 months</span></div>
         <div id="trendChart"></div>
       </div>
@@ -170,6 +178,7 @@
           </button>
           <button class="btn btn-ghost" id="filterBtn">Filters<span class="filter-count hidden" id="filterCount"></span></button>
           <button class="btn btn-ghost" id="exportBtn">Export</button>
+          <button class="btn btn-ghost" id="backupBtn" title="Download a full raw backup of all data">Backup JSON</button>
         </div>
       </div>
 
