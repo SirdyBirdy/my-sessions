@@ -13,6 +13,7 @@ const $ = (id) => document.getElementById(id);
 
 const EDIT_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
 const TRASH_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>';
+const DUP_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
 
 // ===== INIT =====
 window.addEventListener('DOMContentLoaded', () => {
@@ -61,6 +62,7 @@ function bindEvents() {
 
   // Insights
   $('monthFilter').addEventListener('change', () => { renderInsights(); renderBreakdown(); renderHistoryList(); });
+  $('fyFilter').addEventListener('change', renderFYStats);
 
   // History toolbar
   $('clientSearch').addEventListener('input', renderHistoryList);
@@ -70,6 +72,7 @@ function bindEvents() {
   $('sortSelect').addEventListener('change', () => setSortFromSelect($('sortSelect').value));
   $('sortDirBtn').addEventListener('click', toggleSortDir);
   $('exportBtn').addEventListener('click', onExport);
+  $('backupBtn').addEventListener('click', onBackupJSON);
   document.querySelectorAll('#sessionsTable thead th.sortable').forEach(th => {
     th.addEventListener('click', () => setSortFromHeader(th.dataset.sort));
   });
@@ -353,6 +356,15 @@ async function onAddSession(e) {
     fee, commissionRate: rate, toOrg, toArmeet,
   };
 
+  // Non-blocking duplicate-entry guard: same session name + date already logged.
+  if (!editingId) {
+    const dupe = DATA.sessions.find(s =>
+      s.session.trim().toLowerCase() === fields.session.toLowerCase() && s.date === fields.date);
+    if (dupe) {
+      showNotice(`Heads up: "${fields.session}" already has a session logged on ${formatDate(fields.date)}. Saved anyway — check History if that wasn't intended.`);
+    }
+  }
+
   const submitBtn = $('formSubmitBtn');
   submitBtn.disabled = true;
 
@@ -393,10 +405,12 @@ async function onAddSession(e) {
 function fullRerender() {
   renderReferenceOptions();
   renderMonthOptions();
+  renderFYOptions();
   renderOrgFilter();
   renderLocationFilter();
   updateLocationOptions();
   renderInsights();
+  renderFYStats();
   renderHistoryList();
   renderTrendChart();
   renderBreakdown();
@@ -434,6 +448,29 @@ function editSession(id) {
   $('formSubmitBtn').textContent = 'Save changes';
   $('cancelEditBtn').classList.remove('hidden');
 
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// Pre-fills the form with an existing session's details as a fresh (non-edit)
+// entry — same client, referrer, mode, location, fee and commission, but
+// today's date — so a repeat visit is one tap plus a submit.
+function duplicateSession(id) {
+  const session = DATA.sessions.find(s => s.id === id);
+  if (!session) return;
+  exitEditMode();
+  switchTab('log');
+
+  $('fSession').value = session.session;
+  $('fDate').value = todayISO();
+  $('fReference').value = session.reference;
+  onReferenceChange();
+  $('fModeSession').value = session.modeSession;
+  $('fLocation').value = session.location;
+  $('fFee').value = session.fee;
+  $('fCommission').value = session.commissionRate;
+  updateCalcPreview();
+
+  showNotice(`Prefilled a new session for "${session.session}" — check the date and details, then submit.`);
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
@@ -554,6 +591,44 @@ function formatMonth(m) {
   if (!m) return '';
   const [y, mo] = m.split('-');
   return new Date(y, mo - 1, 1).toLocaleString('en-IN', { month: 'long', year: 'numeric' });
+}
+
+// ===== FINANCIAL YEAR (April – March) =====
+// FY key format: "2025-26" meaning 1 Apr 2025 – 31 Mar 2026
+function fyKeyForDate(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00');
+  const y = d.getFullYear();
+  const startYear = d.getMonth() >= 3 ? y : y - 1; // month is 0-indexed, 3 = April
+  return `${startYear}-${String((startYear + 1) % 100).padStart(2, '0')}`;
+}
+
+function currentFYKey() {
+  return fyKeyForDate(todayISO());
+}
+
+function renderFYOptions() {
+  const sel = $('fyFilter');
+  const current = sel.value;
+  const fys = [...new Set(DATA.sessions.map(s => fyKeyForDate(s.date)))];
+  const thisFY = currentFYKey();
+  if (!fys.includes(thisFY)) fys.push(thisFY);
+  fys.sort().reverse();
+  sel.innerHTML = fys.map(f => `<option value="${f}">FY ${f}</option>`).join('');
+  sel.value = fys.includes(current) ? current : thisFY;
+}
+
+function renderFYStats() {
+  const fy = $('fyFilter').value || currentFYKey();
+  const rows = DATA.sessions.filter(s => fyKeyForDate(s.date) === fy);
+  const totalFee = rows.reduce((sum, s) => sum + s.fee, 0);
+  const totalToArmeet = rows.reduce((sum, s) => sum + s.toArmeet, 0);
+  const totalToOrg = rows.reduce((sum, s) => sum + s.toOrg, 0);
+  $('fyStats').innerHTML = `
+    <span class="fy-stat"><b>${rows.length}</b> session${rows.length === 1 ? '' : 's'}</span>
+    <span class="fy-stat">₹${totalFee.toLocaleString('en-IN')} collected</span>
+    <span class="fy-stat">₹${totalToOrg.toLocaleString('en-IN')} to organisations</span>
+    <span class="fy-stat fy-stat-highlight">₹${totalToArmeet.toLocaleString('en-IN')} yours</span>
+  `;
 }
 
 function renderOrgFilter() {
@@ -708,6 +783,7 @@ function renderTableRow(s, srNo, i) {
     <td>₹${s.toOrg.toLocaleString('en-IN')}</td>
     <td>₹${s.toArmeet.toLocaleString('en-IN')}</td>
     <td><div class="row-actions">
+      <button class="icon-btn icon-btn-dup" onclick="duplicateSession('${s.id}')" title="Duplicate as new session">${DUP_ICON}</button>
       <button class="icon-btn icon-btn-edit" onclick="editSession('${s.id}')" title="Edit">${EDIT_ICON}</button>
       <button class="icon-btn" onclick="deleteSession('${s.id}')" title="Delete">${TRASH_ICON}</button>
     </div></td>
@@ -729,6 +805,7 @@ function renderCard(s, srNo, i) {
     <div class="sc-bottom">
       <span class="sc-fee">#${srNo} · Fee ₹${s.fee.toLocaleString('en-IN')} · ${s.commissionRate}%</span>
       <div class="sc-actions">
+        <button class="icon-btn icon-btn-dup" onclick="duplicateSession('${s.id}')" title="Duplicate as new session">${DUP_ICON}</button>
         <button class="icon-btn icon-btn-edit" onclick="editSession('${s.id}')" title="Edit">${EDIT_ICON}</button>
         <button class="icon-btn" onclick="deleteSession('${s.id}')" title="Delete">${TRASH_ICON}</button>
       </div>
@@ -792,4 +869,22 @@ function onExport() {
   const month = $('monthFilter').value || 'AllTime';
   const filename = `${org.replace(/\s+/g, '_')}_${month}.xlsx`;
   XLSX.writeFile(wb, filename);
+}
+
+// ===== RAW JSON BACKUP =====
+// Independent safety net from the GitHub-backed store: dumps the whole
+// DATA object (sessions + referenceOptions) exactly as stored, unfiltered.
+function onBackupJSON() {
+  if (!DATA.sessions.length) { showNotice('No data to back up yet.'); return; }
+  const blob = new Blob([JSON.stringify(DATA, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const stamp = todayISO();
+  a.href = url;
+  a.download = `ledger_backup_${stamp}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showNotice('Backup downloaded — this is a full raw copy independent of your GitHub repo.');
 }
