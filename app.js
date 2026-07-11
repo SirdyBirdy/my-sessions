@@ -568,11 +568,24 @@ function compareByKey(a, b, key) {
 // ===== FILTERS =====
 function monthKey(dateStr) { return dateStr ? dateStr.slice(0, 7) : ''; }
 
+// Serial numbers restart at 1 for every calendar month (grouped by the
+// session's own date, not when it was entered), assigned in date/createdAt
+// order within that month — so "Sr. No. 1" always means the first logged
+// session of that particular month, matching the old spreadsheet format.
 function computeSrNoMap() {
-  const sorted = [...DATA.sessions].sort((a, b) =>
-    a.date.localeCompare(b.date) || (a.createdAt || '').localeCompare(b.createdAt || ''));
+  const byMonth = new Map();
+  DATA.sessions.forEach(s => {
+    const mk = monthKey(s.date);
+    if (!byMonth.has(mk)) byMonth.set(mk, []);
+    byMonth.get(mk).push(s);
+  });
+
   const map = new Map();
-  sorted.forEach((s, i) => map.set(s.id, i + 1));
+  byMonth.forEach(monthSessions => {
+    monthSessions
+      .sort((a, b) => a.date.localeCompare(b.date) || (a.createdAt || '').localeCompare(b.createdAt || ''))
+      .forEach((s, i) => map.set(s.id, i + 1));
+  });
   return map;
 }
 
