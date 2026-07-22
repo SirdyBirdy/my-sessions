@@ -197,39 +197,47 @@ input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 
 .fy-stats b{color:var(--text);font-weight:600;}
 .fy-stat-highlight{color:var(--accent);}
 
-/* ===== TREND CHART ===== */
-/* Structure:
-   .trend-plot
-     .trend-scroll (horizontal scroll fallback on very narrow screens)
-       .trend-value-row   — ₹ label above each bar
-       .trend-bars-area   — fixed-height plot: gridlines + avg line + bars, all aligned
-       .trend-label-row   — month labels below each bar
-   All three rows share the same flex column layout so everything lines up.
+/* ===== TREND CHART =====
+   Modelled on the modern shadcn/Tremor dashboard-chart convention:
+   - lead with one clear, auditable number (this month + delta) rather
+     than labelling every bar
+   - horizontal-only gridlines, no axis border, ticks live in one side
+     column instead of repeating on every line
+   - a full-column hover highlight (not just the bar) plus a small
+     dot-indicator tooltip, so hovering anywhere in a month's column works
+   Structure:
+   .trend-header     — leading value + delta
+   .trend-plot       — flex row: y-axis | chart body
+     .trend-y-axis     — 5 tick labels, evenly spaced top(max) to bottom(0)
+     .trend-chart-body
+       .trend-scroll     — horizontal scroll fallback on very narrow screens
+         .trend-bars-area  — gridlines + avg line + bars, fixed height
+         .trend-label-row  — month labels below the plot
 */
 #trendChart{overflow:visible;}
 .trend-empty{color:var(--text-faint);font-size:12px;padding:22px 0;}
 
-.trend-plot{width:100%;}
-.trend-scroll{overflow-x:auto;overflow-y:visible;padding-top:4px;}
-.trend-value-row,.trend-label-row,.trend-bars-row{display:flex;min-width:460px;}
-.trend-col-cell{flex:1 1 0;min-width:0;text-align:center;}
+.trend-header{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:16px;}
+.trend-current-value{font-family:var(--font-display);font-size:26px;font-weight:700;color:var(--text);letter-spacing:-.01em;}
+.trend-current-label{font-family:var(--font-mono);font-size:11px;color:var(--text-faint);}
+.trend-delta{font-family:var(--font-mono);font-size:11.5px;font-weight:600;padding:3px 9px;border-radius:20px;margin-left:auto;}
+.trend-delta-up{color:var(--accent);background:var(--accent-dim);}
+.trend-delta-down{color:var(--other);background:var(--other-bg);}
+.trend-delta-flat{color:var(--text-soft);background:var(--surface-hover);}
 
-.trend-value-row{margin-bottom:6px;}
-.trend-value-row .trend-col-cell{
-  font-family:var(--font-mono);font-size:10.5px;color:var(--text-soft);white-space:nowrap;
-  min-height:14px;
+.trend-plot{width:100%;display:flex;gap:10px;}
+.trend-y-axis{
+  display:flex;flex-direction:column;justify-content:space-between;
+  height:210px;padding:2px 0 26px;flex-shrink:0;
+  font-family:var(--font-mono);font-size:10px;color:var(--text-faint);text-align:right;
 }
+.trend-chart-body{flex:1;min-width:0;}
+.trend-scroll{overflow-x:auto;overflow-y:visible;}
 
-.trend-bars-area{position:relative;height:210px;min-width:460px;}
+.trend-bars-area{position:relative;height:210px;min-width:420px;}
 .trend-gridlines{position:absolute;inset:0;pointer-events:none;}
-.trend-gridline{position:absolute;left:0;right:0;border-top:1px dashed var(--border);}
+.trend-gridline{position:absolute;left:0;right:0;border-top:1px solid var(--border);}
 .trend-gridline[style*="bottom:0%"]{border-top:1px solid var(--border-strong);}
-.trend-gridline-label{
-  position:absolute;left:0;top:-8px;transform:translateY(-100%);
-  font-family:var(--font-mono);font-size:9.5px;color:var(--text-faint);
-  background:var(--bg-elevated);padding:1px 5px 1px 0;
-}
-.trend-gridline[style*="bottom:0%"] .trend-gridline-label{transform:translateY(0);top:2px;}
 
 .trend-avg-line{
   position:absolute;left:0;right:0;border-top:1.5px dashed var(--armeet);
@@ -241,45 +249,55 @@ input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 
   opacity:.95;
 }
 
-.trend-bars-row{position:relative;z-index:2;height:100%;align-items:flex-end;gap:8px;}
-.trend-bar-cell{position:relative;display:flex;align-items:flex-end;justify-content:center;height:100%;}
+.trend-bars-row{position:relative;z-index:2;height:100%;display:flex;align-items:flex-end;}
+.trend-bar-cell{position:relative;flex:1 1 0;min-width:0;display:flex;align-items:flex-end;justify-content:center;height:100%;}
+
+/* Hover target spans the full column height, not just the bar — hovering
+   anywhere above a short bar still surfaces its tooltip. */
+.trend-hover-col{
+  position:absolute;inset:0 1px;border-radius:6px;
+  background:transparent;transition:background .12s var(--ease);z-index:0;
+}
+.trend-bar-cell:hover .trend-hover-col{background:var(--surface-hover);}
+
 .trend-bar{
-  width:56%;max-width:30px;
-  background:linear-gradient(180deg, var(--accent), rgba(94,234,212,.22));
-  border-radius:6px 6px 3px 3px;
+  position:relative;z-index:1;
+  width:46%;max-width:26px;
+  background:linear-gradient(180deg, var(--accent), rgba(94,234,212,.35));
+  border-radius:4px 4px 2px 2px;
   height:0%;min-height:0;
   transition:height .55s var(--ease), opacity .15s;
-  box-shadow:0 0 14px -5px var(--accent-glow);
   cursor:pointer;
 }
 .trend-bar.is-current{
   background:linear-gradient(180deg, #ffffff, var(--accent));
-  box-shadow:0 0 20px -3px var(--accent-glow);
+  box-shadow:0 0 16px -4px var(--accent-glow);
 }
-.trend-bar-cell:hover .trend-bar{opacity:.75;}
+.trend-bar-cell:hover .trend-bar{opacity:.8;}
 
 .trend-bar-tooltip{
-  position:absolute;bottom:calc(100% + 10px);left:50%;
+  position:absolute;bottom:calc(100% + 8px);left:50%;z-index:6;
   transform:translateX(-50%) translateY(4px);
   background:var(--bg-elevated);border:1px solid var(--border-strong);color:var(--text);
-  font-family:var(--font-mono);font-size:11.5px;font-weight:600;padding:7px 11px;border-radius:8px;
+  font-family:var(--font-mono);font-size:11px;padding:7px 11px;border-radius:8px;
   white-space:nowrap;opacity:0;pointer-events:none;
-  transition:opacity .15s var(--ease), transform .15s var(--ease);
-  box-shadow:0 10px 26px rgba(0,0,0,.45);z-index:6;text-align:center;
+  transition:opacity .12s var(--ease), transform .12s var(--ease);
+  box-shadow:0 10px 26px rgba(0,0,0,.45);
+  display:flex;align-items:center;gap:7px;
 }
-.trend-bar-tooltip::after{
-  content:'';position:absolute;top:100%;left:50%;transform:translateX(-50%);
-  border:5px solid transparent;border-top-color:var(--border-strong);
-}
-.trend-bar-tooltip span{display:block;color:var(--text-faint);font-size:9.5px;font-weight:400;margin-top:3px;}
+.trend-bar-tooltip b{color:var(--text);font-weight:700;margin-left:2px;}
+.trend-tooltip-dot{width:7px;height:7px;border-radius:50%;background:var(--accent);flex-shrink:0;}
+.trend-tooltip-dot.is-current{background:#fff;box-shadow:0 0 0 2px var(--accent);}
 .trend-bar-cell:hover .trend-bar-tooltip{opacity:1;transform:translateX(-50%) translateY(0);}
 
-.trend-label-row{margin-top:9px;}
-.trend-label-row .trend-col-cell{font-family:var(--font-mono);font-size:10.5px;color:var(--text-faint);}
-.trend-label-row .trend-col-cell.is-current{color:var(--accent);font-weight:700;}
+.trend-label-row{display:flex;margin-top:9px;}
+.trend-col-cell{flex:1 1 0;min-width:0;text-align:center;}
+.trend-label-cell{font-family:var(--font-mono);font-size:10.5px;color:var(--text-faint);}
+.trend-label-cell.is-current{color:var(--accent);font-weight:700;}
 
 @media (max-width:480px){
-  .trend-bars-area{height:180px;}
+  .trend-bars-area{height:170px;}
+  .trend-y-axis{height:170px;}
 }
 
 /* ===== BREAKDOWN ===== */
