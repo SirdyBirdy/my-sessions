@@ -704,12 +704,29 @@ function renderInsights() {
   $('heroSub').textContent = `${rows.length} session${rows.length === 1 ? '' : 's'} · ₹${totalFee.toLocaleString('en-IN')} collected`;
 }
 
+// Formats a rupee amount into a short label using the Indian numbering
+// system (thousand → k, lakh → L) so large totals stay readable on the
+// chart's y-axis, bar labels, and average line without wrapping.
+function formatShort(v) {
+  v = Math.round(v);
+  if (v >= 100000) {
+    const lakhs = v / 100000;
+    return (Number.isInteger(lakhs) ? lakhs : lakhs.toFixed(1)) + 'L';
+  }
+  if (v >= 1000) {
+    const th = v / 1000;
+    return (Number.isInteger(th) ? th : th.toFixed(1)) + 'k';
+  }
+  return String(v);
+}
+
 function renderTrendChart() {
   const container = $('trendChart');
   if (!DATA.sessions.length) {
     container.innerHTML = '<p class="trend-empty">No sessions logged yet — this fills in as you add entries.</p>';
     return;
   }
+
   const now = new Date();
   const months = [];
   for (let i = 11; i >= 0; i--) {
@@ -722,20 +739,60 @@ function renderTrendChart() {
   });
   const values = months.map(m => totals[m] || 0);
   const max = Math.max(...values, 1);
+  const avg = values.reduce((a, b) => a + b, 0) / values.length;
+  const avgPct = Math.min((avg / max) * 100, 100);
+  const thisMonthKey = now.toISOString().slice(0, 7);
 
-  const bars = months.map((m, i) => {
+  // Gridlines from 0% to 100% of the tallest month, each labelled with the
+  // rupee value it represents, so the chart reads like a real axis instead
+  // of a row of unlabelled bars.
+  const gridlinesHtml = [0, 25, 50, 75, 100].map(pct => `
+    <div class="trend-gridline" style="bottom:${pct}%">
+      <span class="trend-gridline-label">₹${formatShort(max * pct / 100)}</span>
+    </div>`).join('');
+
+  const valueRow = values.map(v =>
+    `<div class="trend-col-cell">${v ? '₹' + formatShort(v) : ''}</div>`
+  ).join('');
+
+  const barsRow = months.map((m, i) => {
     const v = values[i];
-    const h = v ? Math.max(Math.round((v / max) * 120), 2) : 2;
-    const [y, mo] = m.split('-');
-    const label = new Date(y, mo - 1, 1).toLocaleString('en-IN', { month: 'short' });
-    return `<div class="trend-bar-col">
-      <div class="trend-bar-value">${v ? '₹' + Math.round(v / 1000) + 'k' : ''}</div>
-      <div class="trend-bar" style="height:${h}px" title="${formatMonth(m)}: ₹${v.toLocaleString('en-IN')}"></div>
-      <div class="trend-bar-label">${label}</div>
+    const pct = max ? (v / max) * 100 : 0;
+    const isCurrent = m === thisMonthKey;
+    return `<div class="trend-col-cell trend-bar-cell">
+      <div class="trend-bar-tooltip">₹${v.toLocaleString('en-IN')}<span>${formatMonth(m)}</span></div>
+      <div class="trend-bar${isCurrent ? ' is-current' : ''}" data-h="${pct}" style="height:0%"></div>
     </div>`;
   }).join('');
 
-  container.innerHTML = `<div class="trend-bars-row">${bars}</div>`;
+  const labelRow = months.map(m => {
+    const [y, mo] = m.split('-');
+    const label = new Date(y, mo - 1, 1).toLocaleString('en-IN', { month: 'short' });
+    const isCurrent = m === thisMonthKey;
+    return `<div class="trend-col-cell trend-label-cell${isCurrent ? ' is-current' : ''}">${label}</div>`;
+  }).join('');
+
+  container.innerHTML = `
+    <div class="trend-plot">
+      <div class="trend-scroll">
+        <div class="trend-value-row">${valueRow}</div>
+        <div class="trend-bars-area">
+          <div class="trend-gridlines">${gridlinesHtml}</div>
+          <div class="trend-avg-line" style="bottom:${avgPct}%"><span>avg ₹${formatShort(avg)}</span></div>
+          <div class="trend-bars-row">${barsRow}</div>
+        </div>
+        <div class="trend-label-row">${labelRow}</div>
+      </div>
+    </div>
+  `;
+
+  // Grow bars in from zero, staggered left-to-right, instead of popping
+  // straight to full height.
+  requestAnimationFrame(() => {
+    container.querySelectorAll('.trend-bar').forEach((el, i) => {
+      setTimeout(() => { el.style.height = el.dataset.h + '%'; }, i * 30);
+    });
+  });
 }
 
 function groupBy(rows, keyFn) {
