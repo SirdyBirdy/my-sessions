@@ -743,24 +743,41 @@ function renderTrendChart() {
   const avgPct = Math.min((avg / max) * 100, 100);
   const thisMonthKey = now.toISOString().slice(0, 7);
 
-  // Gridlines from 0% to 100% of the tallest month, each labelled with the
-  // rupee value it represents, so the chart reads like a real axis instead
-  // of a row of unlabelled bars.
-  const gridlinesHtml = [0, 25, 50, 75, 100].map(pct => `
-    <div class="trend-gridline" style="bottom:${pct}%">
-      <span class="trend-gridline-label">₹${formatShort(max * pct / 100)}</span>
-    </div>`).join('');
+  // Leading month-over-month delta, in the spirit of fintech-style
+  // dashboards that lead with one clear, auditable number instead of
+  // a wall of chart labels. Falls back gracefully if there's no prior
+  // month to compare against.
+  const curVal = values[values.length - 1];
+  const prevVal = values[values.length - 2];
+  let deltaHtml = '';
+  if (prevVal > 0) {
+    const pct = Math.round(((curVal - prevVal) / prevVal) * 100);
+    const dir = pct > 0 ? 'up' : pct < 0 ? 'down' : 'flat';
+    const arrow = dir === 'up' ? '\u25B2' : dir === 'down' ? '\u25BC' : '\u2013';
+    deltaHtml = `<span class="trend-delta trend-delta-${dir}">${arrow} ${Math.abs(pct)}% vs last month</span>`;
+  } else if (curVal > 0) {
+    deltaHtml = `<span class="trend-delta trend-delta-up">First month with earnings</span>`;
+  }
 
-  const valueRow = values.map(v =>
-    `<div class="trend-col-cell">${v ? '₹' + formatShort(v) : ''}</div>`
+  // Y-axis ticks: 5 evenly spaced values from 0 to the tallest month,
+  // shown once in a side column rather than repeated on every gridline.
+  const yAxisHtml = [100, 75, 50, 25, 0].map(pct =>
+    `<span>₹${formatShort(max * pct / 100)}</span>`
+  ).join('');
+
+  // Horizontal-only gridlines (no vertical lines, no axis border) — the
+  // minimal cartesian-grid look used by most modern chart libraries.
+  const gridlinesHtml = [0, 25, 50, 75, 100].map(pct =>
+    `<div class="trend-gridline" style="bottom:${pct}%"></div>`
   ).join('');
 
   const barsRow = months.map((m, i) => {
     const v = values[i];
     const pct = max ? (v / max) * 100 : 0;
     const isCurrent = m === thisMonthKey;
-    return `<div class="trend-col-cell trend-bar-cell">
-      <div class="trend-bar-tooltip">₹${v.toLocaleString('en-IN')}<span>${formatMonth(m)}</span></div>
+    return `<div class="trend-bar-cell">
+      <div class="trend-hover-col"></div>
+      <div class="trend-bar-tooltip"><span class="trend-tooltip-dot${isCurrent ? ' is-current' : ''}"></span>${formatMonth(m)}<b>₹${v.toLocaleString('en-IN')}</b></div>
       <div class="trend-bar${isCurrent ? ' is-current' : ''}" data-h="${pct}" style="height:0%"></div>
     </div>`;
   }).join('');
@@ -773,15 +790,22 @@ function renderTrendChart() {
   }).join('');
 
   container.innerHTML = `
+    <div class="trend-header">
+      <span class="trend-current-value">₹${curVal.toLocaleString('en-IN')}</span>
+      <span class="trend-current-label">this month</span>
+      ${deltaHtml}
+    </div>
     <div class="trend-plot">
-      <div class="trend-scroll">
-        <div class="trend-value-row">${valueRow}</div>
-        <div class="trend-bars-area">
-          <div class="trend-gridlines">${gridlinesHtml}</div>
-          <div class="trend-avg-line" style="bottom:${avgPct}%"><span>avg ₹${formatShort(avg)}</span></div>
-          <div class="trend-bars-row">${barsRow}</div>
+      <div class="trend-y-axis">${yAxisHtml}</div>
+      <div class="trend-chart-body">
+        <div class="trend-scroll">
+          <div class="trend-bars-area">
+            <div class="trend-gridlines">${gridlinesHtml}</div>
+            <div class="trend-avg-line" style="bottom:${avgPct}%"><span>avg ₹${formatShort(avg)}</span></div>
+            <div class="trend-bars-row">${barsRow}</div>
+          </div>
+          <div class="trend-label-row">${labelRow}</div>
         </div>
-        <div class="trend-label-row">${labelRow}</div>
       </div>
     </div>
   `;
