@@ -198,18 +198,89 @@ input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 
 .fy-stat-highlight{color:var(--accent);}
 
 /* ===== TREND CHART ===== */
-#trendChart{overflow-x:auto;}
-.trend-bar-col{display:inline-flex;flex-direction:column;align-items:center;gap:7px;}
-.trend-bars-row{display:flex;align-items:flex-end;gap:13px;height:140px;padding:0 2px 4px;}
-.trend-bar{
-  width:20px;background:linear-gradient(180deg, var(--accent), rgba(94,234,212,.3));
-  border-radius:4px 4px 0 0;min-height:2px;transition:opacity .12s, height .3s var(--ease);
-  box-shadow:0 0 14px -4px var(--accent-glow);
-}
-.trend-bar:hover{opacity:.7;}
-.trend-bar-value{font-family:var(--font-mono);font-size:9.5px;color:var(--text-soft);white-space:nowrap;}
-.trend-bar-label{font-size:10px;color:var(--text-faint);font-family:var(--font-mono);white-space:nowrap;}
+/* Structure:
+   .trend-plot
+     .trend-scroll (horizontal scroll fallback on very narrow screens)
+       .trend-value-row   — ₹ label above each bar
+       .trend-bars-area   — fixed-height plot: gridlines + avg line + bars, all aligned
+       .trend-label-row   — month labels below each bar
+   All three rows share the same flex column layout so everything lines up.
+*/
+#trendChart{overflow:visible;}
 .trend-empty{color:var(--text-faint);font-size:12px;padding:22px 0;}
+
+.trend-plot{width:100%;}
+.trend-scroll{overflow-x:auto;overflow-y:visible;padding-top:4px;}
+.trend-value-row,.trend-label-row,.trend-bars-row{display:flex;min-width:460px;}
+.trend-col-cell{flex:1 1 0;min-width:0;text-align:center;}
+
+.trend-value-row{margin-bottom:6px;}
+.trend-value-row .trend-col-cell{
+  font-family:var(--font-mono);font-size:10.5px;color:var(--text-soft);white-space:nowrap;
+  min-height:14px;
+}
+
+.trend-bars-area{position:relative;height:210px;min-width:460px;}
+.trend-gridlines{position:absolute;inset:0;pointer-events:none;}
+.trend-gridline{position:absolute;left:0;right:0;border-top:1px dashed var(--border);}
+.trend-gridline[style*="bottom:0%"]{border-top:1px solid var(--border-strong);}
+.trend-gridline-label{
+  position:absolute;left:0;top:-8px;transform:translateY(-100%);
+  font-family:var(--font-mono);font-size:9.5px;color:var(--text-faint);
+  background:var(--bg-elevated);padding:1px 5px 1px 0;
+}
+.trend-gridline[style*="bottom:0%"] .trend-gridline-label{transform:translateY(0);top:2px;}
+
+.trend-avg-line{
+  position:absolute;left:0;right:0;border-top:1.5px dashed var(--armeet);
+  opacity:.55;z-index:1;
+}
+.trend-avg-line span{
+  position:absolute;right:0;top:-16px;font-family:var(--font-mono);font-size:9.5px;
+  color:var(--armeet);background:var(--bg-elevated);padding:1px 6px;border-radius:4px;
+  opacity:.95;
+}
+
+.trend-bars-row{position:relative;z-index:2;height:100%;align-items:flex-end;gap:8px;}
+.trend-bar-cell{position:relative;display:flex;align-items:flex-end;justify-content:center;height:100%;}
+.trend-bar{
+  width:56%;max-width:30px;
+  background:linear-gradient(180deg, var(--accent), rgba(94,234,212,.22));
+  border-radius:6px 6px 3px 3px;
+  height:0%;min-height:0;
+  transition:height .55s var(--ease), opacity .15s;
+  box-shadow:0 0 14px -5px var(--accent-glow);
+  cursor:pointer;
+}
+.trend-bar.is-current{
+  background:linear-gradient(180deg, #ffffff, var(--accent));
+  box-shadow:0 0 20px -3px var(--accent-glow);
+}
+.trend-bar-cell:hover .trend-bar{opacity:.75;}
+
+.trend-bar-tooltip{
+  position:absolute;bottom:calc(100% + 10px);left:50%;
+  transform:translateX(-50%) translateY(4px);
+  background:var(--bg-elevated);border:1px solid var(--border-strong);color:var(--text);
+  font-family:var(--font-mono);font-size:11.5px;font-weight:600;padding:7px 11px;border-radius:8px;
+  white-space:nowrap;opacity:0;pointer-events:none;
+  transition:opacity .15s var(--ease), transform .15s var(--ease);
+  box-shadow:0 10px 26px rgba(0,0,0,.45);z-index:6;text-align:center;
+}
+.trend-bar-tooltip::after{
+  content:'';position:absolute;top:100%;left:50%;transform:translateX(-50%);
+  border:5px solid transparent;border-top-color:var(--border-strong);
+}
+.trend-bar-tooltip span{display:block;color:var(--text-faint);font-size:9.5px;font-weight:400;margin-top:3px;}
+.trend-bar-cell:hover .trend-bar-tooltip{opacity:1;transform:translateX(-50%) translateY(0);}
+
+.trend-label-row{margin-top:9px;}
+.trend-label-row .trend-col-cell{font-family:var(--font-mono);font-size:10.5px;color:var(--text-faint);}
+.trend-label-row .trend-col-cell.is-current{color:var(--accent);font-weight:700;}
+
+@media (max-width:480px){
+  .trend-bars-area{height:180px;}
+}
 
 /* ===== BREAKDOWN ===== */
 .breakdown-grid{display:grid;grid-template-columns:repeat(3, minmax(0,1fr));gap:24px;}
