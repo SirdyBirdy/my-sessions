@@ -8,6 +8,7 @@ let sortKey = 'date';
 let sortDir = 'asc';
 let pendingDelete = null;
 let noticeTimer = null;
+let trendChartInstance = null;
 
 const $ = (id) => document.getElementById(id);
 
@@ -724,6 +725,7 @@ function renderTrendChart() {
   const container = $('trendChart');
   if (!DATA.sessions.length) {
     container.innerHTML = '<p class="trend-empty">No sessions logged yet — this fills in as you add entries.</p>';
+    if (trendChartInstance) { trendChartInstance.destroy(); trendChartInstance = null; }
     return;
   }
 
@@ -738,10 +740,10 @@ function renderTrendChart() {
     totals[mk] = (totals[mk] || 0) + s.toArmeet;
   });
   const values = months.map(m => totals[m] || 0);
-  const max = Math.max(...values, 1);
-  const avg = values.reduce((a, b) => a + b, 0) / values.length;
-  const avgPct = Math.min((avg / max) * 100, 100);
-  const thisMonthKey = now.toISOString().slice(0, 7);
+  const labels = months.map(m => {
+    const [y, mo] = m.split('-');
+    return new Date(y, mo - 1, 1).toLocaleString('en-IN', { month: 'short' });
+  });
 
   // Leading month-over-month delta, in the spirit of fintech-style
   // dashboards that lead with one clear, auditable number instead of
@@ -759,63 +761,80 @@ function renderTrendChart() {
     deltaHtml = `<span class="trend-delta trend-delta-up">First month with earnings</span>`;
   }
 
-  // Y-axis ticks: 5 evenly spaced values from 0 to the tallest month,
-  // shown once in a side column rather than repeated on every gridline.
-  const yAxisHtml = [100, 75, 50, 25, 0].map(pct =>
-    `<span>₹${formatShort(max * pct / 100)}</span>`
-  ).join('');
-
-  // Horizontal-only gridlines (no vertical lines, no axis border) — the
-  // minimal cartesian-grid look used by most modern chart libraries.
-  const gridlinesHtml = [0, 25, 50, 75, 100].map(pct =>
-    `<div class="trend-gridline" style="bottom:${pct}%"></div>`
-  ).join('');
-
-  const barsRow = months.map((m, i) => {
-    const v = values[i];
-    const pct = max ? (v / max) * 100 : 0;
-    const isCurrent = m === thisMonthKey;
-    return `<div class="trend-bar-cell">
-      <div class="trend-hover-col"></div>
-      <div class="trend-bar-tooltip"><span class="trend-tooltip-dot${isCurrent ? ' is-current' : ''}"></span>${formatMonth(m)}<b>₹${v.toLocaleString('en-IN')}</b></div>
-      <div class="trend-bar${isCurrent ? ' is-current' : ''}" data-h="${pct}" style="height:0%"></div>
-    </div>`;
-  }).join('');
-
-  const labelRow = months.map(m => {
-    const [y, mo] = m.split('-');
-    const label = new Date(y, mo - 1, 1).toLocaleString('en-IN', { month: 'short' });
-    const isCurrent = m === thisMonthKey;
-    return `<div class="trend-col-cell trend-label-cell${isCurrent ? ' is-current' : ''}">${label}</div>`;
-  }).join('');
-
   container.innerHTML = `
     <div class="trend-header">
       <span class="trend-current-value">₹${curVal.toLocaleString('en-IN')}</span>
       <span class="trend-current-label">this month</span>
       ${deltaHtml}
     </div>
-    <div class="trend-plot">
-      <div class="trend-y-axis">${yAxisHtml}</div>
-      <div class="trend-chart-body">
-        <div class="trend-scroll">
-          <div class="trend-bars-area">
-            <div class="trend-gridlines">${gridlinesHtml}</div>
-            <div class="trend-avg-line" style="bottom:${avgPct}%"><span>avg ₹${formatShort(avg)}</span></div>
-            <div class="trend-bars-row">${barsRow}</div>
-          </div>
-          <div class="trend-label-row">${labelRow}</div>
-        </div>
-      </div>
+    <div class="trend-chart-wrap">
+      <canvas id="trendCanvas" role="img" aria-label="Area chart of your monthly earnings over the last 12 months">Monthly earnings, last 12 months: ${months.map((m, i) => `${labels[i]} ₹${values[i]}`).join(', ')}</canvas>
     </div>
   `;
 
-  // Grow bars in from zero, staggered left-to-right, instead of popping
-  // straight to full height.
-  requestAnimationFrame(() => {
-    container.querySelectorAll('.trend-bar').forEach((el, i) => {
-      setTimeout(() => { el.style.height = el.dataset.h + '%'; }, i * 30);
-    });
+  if (trendChartInstance) trendChartInstance.destroy();
+
+  const accent = '#5EEAD4';
+  const gridColor = 'rgba(255,255,255,.06)';
+  const tickColor = '#585E68';
+
+  // Last point gets a visible dot to mark "now"; the rest stay bare so
+  // the line itself carries the shape of the trend without 12 dots
+  // competing for attention.
+  const pointRadii = values.map((_, i) => i === values.length - 1 ? 4 : 0);
+  const pointBg = values.map((_, i) => i === values.length - 1 ? '#ffffff' : accent);
+
+  trendChartInstance = new Chart($('trendCanvas'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        data: values,
+        borderColor: accent,
+        backgroundColor: 'rgba(94,234,212,0.12)',
+        borderWidth: 2,
+        tension: 0.4,
+        fill: true,
+        pointRadius: pointRadii,
+        pointBackgroundColor: pointBg,
+        pointBorderColor: accent,
+        pointBorderWidth: 2,
+        pointHoverRadius: 5,
+        pointHoverBackgroundColor: '#ffffff',
+        pointHoverBorderColor: accent,
+        pointHoverBorderWidth: 2,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { intersect: false, mode: 'index' },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#0D0F12',
+          borderColor: '#31353C',
+          borderWidth: 1,
+          titleColor: '#9298A3',
+          bodyColor: '#EDEFF3',
+          bodyFont: { weight: '600' },
+          displayColors: false,
+          padding: 10,
+          cornerRadius: 8,
+          callbacks: {
+            label: (ctx) => '₹' + ctx.parsed.y.toLocaleString('en-IN'),
+          },
+        },
+      },
+      scales: {
+        x: {
+          grid: { display: false },
+          border: { display: false },
+          ticks: { color: tickColor, font: { family: 'JetBrains Mono', size: 10 } },
+        },
+        y: { display: false },
+      },
+    },
   });
 }
 
