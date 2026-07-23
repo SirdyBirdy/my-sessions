@@ -781,7 +781,7 @@ function renderTrendChart() {
   // Last point gets a visible dot to mark "now"; the rest stay bare so
   // the line itself carries the shape of the trend without 12 dots
   // competing for attention.
-  const pointRadii = values.map((_, i) => i === values.length - 1 ? 4 : 0);
+  const pointRadii = values.map((_, i) => i === values.length - 1 ? 5 : 0);
   const pointBg = values.map((_, i) => i === values.length - 1 ? '#ffffff' : accent);
 
   trendChartInstance = new Chart($('trendCanvas'), {
@@ -795,11 +795,12 @@ function renderTrendChart() {
         borderWidth: 2,
         tension: 0.4,
         fill: true,
+        clip: false,
         pointRadius: pointRadii,
         pointBackgroundColor: pointBg,
         pointBorderColor: accent,
         pointBorderWidth: 2,
-        pointHoverRadius: 5,
+        pointHoverRadius: 6,
         pointHoverBackgroundColor: '#ffffff',
         pointHoverBorderColor: accent,
         pointHoverBorderWidth: 2,
@@ -809,6 +810,11 @@ function renderTrendChart() {
       responsive: true,
       maintainAspectRatio: false,
       interaction: { intersect: false, mode: 'index' },
+      // Without this, the "now" marker for the current month sits exactly
+      // on the right edge of the canvas and gets clipped off — the padding
+      // plus x-axis offset give it (and the first month, on the left) room
+      // to actually render fully.
+      layout: { padding: { top: 12, right: 14, left: 4, bottom: 4 } },
       plugins: {
         legend: { display: false },
         tooltip: {
@@ -828,6 +834,7 @@ function renderTrendChart() {
       },
       scales: {
         x: {
+          offset: true,
           grid: { display: false },
           border: { display: false },
           ticks: { color: tickColor, font: { family: 'JetBrains Mono', size: 10 } },
