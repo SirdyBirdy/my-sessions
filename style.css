@@ -198,21 +198,12 @@ input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 
 .fy-stat-highlight{color:var(--accent);}
 
 /* ===== TREND CHART =====
-   Modelled on the modern shadcn/Tremor dashboard-chart convention:
-   - lead with one clear, auditable number (this month + delta) rather
-     than labelling every bar
-   - horizontal-only gridlines, no axis border, ticks live in one side
-     column instead of repeating on every line
-   - a full-column hover highlight (not just the bar) plus a small
-     dot-indicator tooltip, so hovering anywhere in a month's column works
+   A smooth area chart (Chart.js), in place of the earlier hand-rolled
+   bar chart — one calm curve, a light fill, no gridlines, month ticks
+   only. Still leads with the plain-language number + delta.
    Structure:
-   .trend-header     — leading value + delta
-   .trend-plot       — flex row: y-axis | chart body
-     .trend-y-axis     — 5 tick labels, evenly spaced top(max) to bottom(0)
-     .trend-chart-body
-       .trend-scroll     — horizontal scroll fallback on very narrow screens
-         .trend-bars-area  — gridlines + avg line + bars, fixed height
-         .trend-label-row  — month labels below the plot
+   .trend-header      — this month's value + delta vs last month
+   .trend-chart-wrap  — sized wrapper Chart.js measures itself against
 */
 #trendChart{overflow:visible;}
 .trend-empty{color:var(--text-faint);font-size:12px;padding:22px 0;}
@@ -225,79 +216,10 @@ input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 
 .trend-delta-down{color:var(--other);background:var(--other-bg);}
 .trend-delta-flat{color:var(--text-soft);background:var(--surface-hover);}
 
-.trend-plot{width:100%;display:flex;gap:10px;}
-.trend-y-axis{
-  display:flex;flex-direction:column;justify-content:space-between;
-  height:210px;padding:2px 0 26px;flex-shrink:0;
-  font-family:var(--font-mono);font-size:10px;color:var(--text-faint);text-align:right;
-}
-.trend-chart-body{flex:1;min-width:0;}
-.trend-scroll{overflow-x:auto;overflow-y:visible;}
-
-.trend-bars-area{position:relative;height:210px;min-width:420px;}
-.trend-gridlines{position:absolute;inset:0;pointer-events:none;}
-.trend-gridline{position:absolute;left:0;right:0;border-top:1px solid var(--border);}
-.trend-gridline[style*="bottom:0%"]{border-top:1px solid var(--border-strong);}
-
-.trend-avg-line{
-  position:absolute;left:0;right:0;border-top:1.5px dashed var(--armeet);
-  opacity:.55;z-index:1;
-}
-.trend-avg-line span{
-  position:absolute;right:0;top:-16px;font-family:var(--font-mono);font-size:9.5px;
-  color:var(--armeet);background:var(--bg-elevated);padding:1px 6px;border-radius:4px;
-  opacity:.95;
-}
-
-.trend-bars-row{position:relative;z-index:2;height:100%;display:flex;align-items:flex-end;}
-.trend-bar-cell{position:relative;flex:1 1 0;min-width:0;display:flex;align-items:flex-end;justify-content:center;height:100%;}
-
-/* Hover target spans the full column height, not just the bar — hovering
-   anywhere above a short bar still surfaces its tooltip. */
-.trend-hover-col{
-  position:absolute;inset:0 1px;border-radius:6px;
-  background:transparent;transition:background .12s var(--ease);z-index:0;
-}
-.trend-bar-cell:hover .trend-hover-col{background:var(--surface-hover);}
-
-.trend-bar{
-  position:relative;z-index:1;
-  width:46%;max-width:26px;
-  background:linear-gradient(180deg, var(--accent), rgba(94,234,212,.35));
-  border-radius:4px 4px 2px 2px;
-  height:0%;min-height:0;
-  transition:height .55s var(--ease), opacity .15s;
-  cursor:pointer;
-}
-.trend-bar.is-current{
-  background:linear-gradient(180deg, #ffffff, var(--accent));
-  box-shadow:0 0 16px -4px var(--accent-glow);
-}
-.trend-bar-cell:hover .trend-bar{opacity:.8;}
-
-.trend-bar-tooltip{
-  position:absolute;bottom:calc(100% + 8px);left:50%;z-index:6;
-  transform:translateX(-50%) translateY(4px);
-  background:var(--bg-elevated);border:1px solid var(--border-strong);color:var(--text);
-  font-family:var(--font-mono);font-size:11px;padding:7px 11px;border-radius:8px;
-  white-space:nowrap;opacity:0;pointer-events:none;
-  transition:opacity .12s var(--ease), transform .12s var(--ease);
-  box-shadow:0 10px 26px rgba(0,0,0,.45);
-  display:flex;align-items:center;gap:7px;
-}
-.trend-bar-tooltip b{color:var(--text);font-weight:700;margin-left:2px;}
-.trend-tooltip-dot{width:7px;height:7px;border-radius:50%;background:var(--accent);flex-shrink:0;}
-.trend-tooltip-dot.is-current{background:#fff;box-shadow:0 0 0 2px var(--accent);}
-.trend-bar-cell:hover .trend-bar-tooltip{opacity:1;transform:translateX(-50%) translateY(0);}
-
-.trend-label-row{display:flex;margin-top:9px;}
-.trend-col-cell{flex:1 1 0;min-width:0;text-align:center;}
-.trend-label-cell{font-family:var(--font-mono);font-size:10.5px;color:var(--text-faint);}
-.trend-label-cell.is-current{color:var(--accent);font-weight:700;}
+.trend-chart-wrap{position:relative;height:200px;width:100%;}
 
 @media (max-width:480px){
-  .trend-bars-area{height:170px;}
-  .trend-y-axis{height:170px;}
+  .trend-chart-wrap{height:170px;}
 }
 
 /* ===== BREAKDOWN ===== */
